@@ -93,14 +93,29 @@ class SecureStore(private val context: Context) {
 
     fun setRootFromTree(uri: Uri): File {
         require(Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) { "请先在系统设置授予所有文件访问权限" }
-        require(uri.authority == "com.android.externalstorage.documents") { "仅支持设备主存储目录" }
+        require(uri.authority == "com.android.externalstorage.documents") { "仅支持设备存储目录（请从「系统选择」进入）" }
+
         val id = DocumentsContract.getTreeDocumentId(uri)
-        require(id == "primary:" || id.startsWith("primary:")) { "仅支持设备主存储目录" }
-        val relative = id.removePrefix("primary:")
-        val base = File("/storage/emulated/0").canonicalFile
+        val colon = id.indexOf(':')
+        require(colon > 0) { "无法识别所选目录" }
+
+        val volumeId = id.substring(0, colon)
+        val relative = id.substring(colon + 1)
+
+        // primary 卷 = /storage/emulated/0；其他卷（如 BA73-022B）= /storage/<卷 ID>
+        val base: File = if (volumeId.equals("primary", ignoreCase = true)) {
+            File("/storage/emulated/0")
+        } else {
+            File("/storage", volumeId)
+        }.canonicalFile
+
+        require(base.isDirectory) { "存储卷不可访问：${base.path}" }
+
         val dir = File(base, relative).canonicalFile
         require(dir.path == base.path || dir.path.startsWith(base.path + File.separator)) { "目录超出允许范围" }
-        require(dir.isDirectory && dir.canWrite()) { "文件夹不可写" }
+        require(dir.isDirectory || dir.mkdirs()) { "无法创建目录：${dir.path}" }
+        require(dir.canWrite()) { "文件夹不可写：${dir.path}" }
+
         prefs.edit().putString("root", dir.path).apply()
         return dir
     }
