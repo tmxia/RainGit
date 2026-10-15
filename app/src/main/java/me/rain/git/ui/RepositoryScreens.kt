@@ -322,7 +322,7 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
                         placeholder = { Text("/sdcard/RainGit") }
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text("提示：写 /sdcard 需要先在系统设置授予「所有文件访问」权限（点下方"存储权限"按钮）",
+                    Text("提示：写 /sdcard 需要先在系统设置授予「所有文件访问」权限（点下方「存储权限」按钮）",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
