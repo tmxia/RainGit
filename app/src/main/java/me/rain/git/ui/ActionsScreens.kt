@@ -1,5 +1,6 @@
 package me.rain.git.ui
 
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween

@@ -18,7 +18,8 @@ object WorkflowInputParser {
     @Suppress("UNCHECKED_CAST")
     fun parse(yamlText: String): List<WorkflowInput> {
         return try {
-            val root = Yaml().load<Any>(yamlText) as? Map<String, Any?> ?: return emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val root = Yaml().load(yamlText) as? Map<String, Any?> ?: return emptyList()
             // YAML 1.1：`on:` 可能被解析成布尔 true
             val onBlock = (root["on"] ?: root[true]) as? Map<String, Any?> ?: return emptyList()
             val wd = onBlock["workflow_dispatch"] as? Map<String, Any?> ?: return emptyList()
