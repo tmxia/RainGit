@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun RainApp(
     model: RainViewModel,
+    hasStoragePermission: Boolean,
     onChooseDirectory: () -> Unit,
     onGrantStorage: () -> Unit,
     onOpenUrl: (String) -> Unit
@@ -37,6 +38,34 @@ fun RainApp(
     val dark = when (model.themeMode) { 1 -> false; 2 -> true; else -> systemDark }
     RainTheme(dark) {
         TransparentSystemBars()
+
+        // 首次启动：无权限时弹窗引导授权
+        var permissionPromptShown by androidx.compose.runtime.rememberSaveable {
+            androidx.compose.runtime.mutableStateOf(false)
+        }
+        if (!hasStoragePermission && !permissionPromptShown) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { permissionPromptShown = true },
+                title = { androidx.compose.material3.Text("需要文件访问权限") },
+                text = {
+                    androidx.compose.material3.Text(
+                        "RainGit 需要「所有文件访问」权限才能读写仓库目录（如 /sdcard/RainGit）。" +
+                        "请在下一步弹出的系统设置页中开启。"
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        permissionPromptShown = true
+                        onGrantStorage()
+                    }) { androidx.compose.material3.Text("去授权") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { permissionPromptShown = true }) {
+                        androidx.compose.material3.Text("稍后")
+                    }
+                }
+            )
+        }
         val snack = remember { SnackbarHostState() }
         LaunchedEffect(model.message) {
             val message = model.message ?: return@LaunchedEffect

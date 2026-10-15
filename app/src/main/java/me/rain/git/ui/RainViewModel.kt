@@ -242,6 +242,10 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         message = "Git 作者信息已保存"
     }
 
+    fun showMessage(text: String) {
+        message = text
+    }
+
     fun usePrivateRoot() {
         if (downloading || busy) { message = "操作完成后再切换目录"; return }
         store.resetRoot()
