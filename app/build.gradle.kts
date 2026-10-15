@@ -12,8 +12,10 @@ android {
         applicationId = "me.rain.git"
         minSdk = 30
         targetSdk = 35
-        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "1.3.0"
+        versionCode = System.getenv("RAINGIT_VERSION_CODE")?.toIntOrNull()
+            ?: System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+            ?: 1
+        versionName = System.getenv("RAINGIT_VERSION_NAME") ?: "1.3.0"
     }
 
     signingConfigs {

@@ -6,11 +6,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: raingit-release-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   release:
@@ -18,30 +21,35 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+
       - name: Android SDK
         shell: bash
         run: |
           set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platforms;android-35' 'build-tools;35.0.0'
+
       - name: Prepare release signing
         shell: bash
         env:
-          SIGNING_JKS_B64: ${{ secrets.RAINGIT_KEYSTORE_BASE64 }}
-          SIGNING_PASS: ${{ secrets.RAINGIT_STORE_PASSWORD }}
-          SIGNING_ALIAS: ${{ secrets.RAINGIT_KEY_ALIAS }}
-          SIGNING_KEY_PASS: ${{ secrets.RAINGIT_KEY_PASSWORD }}
+          SIGNING_JKS_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          SIGNING_PASS: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          SIGNING_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          SIGNING_KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [[ -z "$SIGNING_JKS_B64" || -z "$SIGNING_PASS" || -z "$SIGNING_ALIAS" || -z "$SIGNING_KEY_PASS" ]]; then
-            echo '::error::缺少固定 Release 签名。请在 Termux 的 RainGit 源码目录执行 bash scripts/setup-signing.sh 后重新运行。'
+            echo '::error::缺少 RELEASE_* 签名 Secrets。请在 Termux 执行 git-ps key 上传。'
             exit 1
           fi
           KEYSTORE="$RUNNER_TEMP/raingit-release.jks"
@@ -58,10 +66,14 @@ jobs:
             printf 'RAINGIT_SIGNING_STORE_PASSWORD=%s\n' "$SIGNING_PASS"
             printf 'RAINGIT_SIGNING_KEY_ALIAS=%s\n' "$SIGNING_ALIAS"
             printf 'RAINGIT_SIGNING_KEY_PASSWORD=%s\n' "$SIGNING_KEY_PASS"
+            printf 'RAINGIT_VERSION_NAME=%s\n' "1.3.${{ github.run_number }}"
+            printf 'RAINGIT_VERSION_CODE=%s\n' "${{ github.run_number }}"
           } >> "$GITHUB_ENV"
           echo '固定 Release 签名已就绪'
+
       - name: Build signed Release
         run: gradle --no-daemon --max-workers=2 :app:assembleRelease
+
       - name: Verify Release signature
         shell: bash
         run: |
@@ -76,7 +88,21 @@ jobs:
             exit 1
           fi
           echo "Release APK: $APK_BYTES bytes ($(du -h "$APK" | cut -f1))"
-      - name: Upload signed Release APK
+
+      - name: Rename APK
+        id: rename
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NAME="1.3.${{ github.run_number }}"
+          APK_NAME="RainGit-v${VERSION_NAME}.apk"
+          SRC="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -type f | head -n 1)"
+          cp "$SRC" "$APK_NAME"
+          echo "apk_name=${APK_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          ls -lh "$APK_NAME"
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: RainGit-release-${{ github.run_number }}
@@ -84,3 +110,32 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION_NAME="${{ steps.rename.outputs.version_name }}"
+          APK_NAME="${{ steps.rename.outputs.apk_name }}"
+          TAG="v${VERSION_NAME}"
+          COMMIT_SHA="${{ github.sha }}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          gh release delete "${TAG}" --yes 2>/dev/null || true
+          git push origin --delete "${TAG}" 2>/dev/null || true
+          NOTES="## RainGit ${TAG}
+
+          - 版本号：\`${VERSION_NAME}\`（versionCode: \`${{ github.run_number }}\`）
+          - 提交：[\`${SHORT_SHA}\`](${{ github.server_url }}/${{ github.repository }}/commit/${COMMIT_SHA})
+          - 构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')
+
+          **安装方式**
+          1. 下载下方 APK 到 Android 设备
+          2. 允许「安装未知来源应用」
+          3. 直接覆盖安装（同一签名）
+
+          **系统要求**：Android 11+（API 30+）"
+          gh release create "${TAG}" \
+            --title "RainGit ${TAG}" \
+            --notes "${NOTES}" \
+            --latest \
+            "${APK_NAME}"
