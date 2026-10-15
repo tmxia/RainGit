@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -265,14 +266,22 @@ internal data class RunAppearance(val name: String, val color: Color, val icon: 
 
 @Composable
 internal fun runAppearance(status: String, conclusion: String): RunAppearance {
+    // 明暗主题用两套 GitHub 官方状态色，保证对比度
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val success = Color(if (dark) 0xFF3FB950 else 0xFF1A7F37)  // 绿
+    val danger  = Color(if (dark) 0xFFF85149 else 0xFFCF222E)  // 红
+    val info    = Color(if (dark) 0xFF58A6FF else 0xFF0969DA)  // 蓝
+    val warn    = Color(if (dark) 0xFFD29922 else 0xFF9A6700)  // 黄
+    val muted   = Color(if (dark) 0xFF8B949E else 0xFF57606A)  // 灰
+
     return when {
-        conclusion == "success" -> RunAppearance("成功", MaterialTheme.colorScheme.primary, Icons.Rounded.CheckCircle)
-        conclusion == "failure" || conclusion == "timed_out" -> RunAppearance("失败", MaterialTheme.colorScheme.error, Icons.Rounded.Error)
-        conclusion == "skipped" -> RunAppearance("已跳过", MaterialTheme.colorScheme.onSurfaceVariant, Icons.Rounded.SkipNext)
-        conclusion == "neutral" -> RunAppearance("已完成", MaterialTheme.colorScheme.onSurfaceVariant, Icons.Rounded.CheckCircle)
-        conclusion == "cancelled" -> RunAppearance("已取消", MaterialTheme.colorScheme.onSurfaceVariant, Icons.Rounded.Cancel)
-        status == "in_progress" -> RunAppearance("运行中", MaterialTheme.colorScheme.secondary, Icons.Rounded.Autorenew)
-        status == "queued" || status == "waiting" || status == "pending" -> RunAppearance("排队中", MaterialTheme.colorScheme.secondary, Icons.Rounded.Schedule)
-        else -> RunAppearance(conclusion.ifBlank { status.ifBlank { "未知" } }, MaterialTheme.colorScheme.onSurfaceVariant, Icons.Rounded.Info)
+        conclusion == "success" -> RunAppearance("成功", success, Icons.Rounded.CheckCircle)
+        conclusion == "failure" || conclusion == "timed_out" -> RunAppearance("失败", danger, Icons.Rounded.Error)
+        conclusion == "skipped" -> RunAppearance("已跳过", muted, Icons.Rounded.SkipNext)
+        conclusion == "neutral" -> RunAppearance("已完成", muted, Icons.Rounded.CheckCircle)
+        conclusion == "cancelled" -> RunAppearance("已取消", muted, Icons.Rounded.Cancel)
+        status == "in_progress" -> RunAppearance("运行中", info, Icons.Rounded.Autorenew)
+        status == "queued" || status == "waiting" || status == "pending" -> RunAppearance("排队中", warn, Icons.Rounded.Schedule)
+        else -> RunAppearance(conclusion.ifBlank { status.ifBlank { "未知" } }, muted, Icons.Rounded.Info)
     }
 }
