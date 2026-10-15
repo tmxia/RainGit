@@ -147,6 +147,10 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
             catch (e: Exception) {
                 message = e.message ?: "操作失败"
             }
+            catch (e: Throwable) {
+                message = "[严重] ${e.javaClass.simpleName}: ${e.message ?: ""}"
+                android.util.Log.e("RainGitVM", "严重异常", e)
+            }
             finally { busy = false }
         }
     }

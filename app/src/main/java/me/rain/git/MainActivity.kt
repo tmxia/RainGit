@@ -17,6 +17,7 @@ import me.rain.git.ui.RainViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashHandler.install(this)
         enableEdgeToEdge()
         setContent {
             val model: RainViewModel = viewModel()
