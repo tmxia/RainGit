@@ -66,8 +66,8 @@ jobs:
             printf 'RAINGIT_SIGNING_STORE_PASSWORD=%s\n' "$SIGNING_PASS"
             printf 'RAINGIT_SIGNING_KEY_ALIAS=%s\n' "$SIGNING_ALIAS"
             printf 'RAINGIT_SIGNING_KEY_PASSWORD=%s\n' "$SIGNING_KEY_PASS"
-            printf 'RAINGIT_VERSION_NAME=%s\n' "1.3.${{ github.run_number }}"
-            printf 'RAINGIT_VERSION_CODE=%s\n' "${{ github.run_number }}"
+            printf 'RAINGIT_VERSION_NAME=%s\n' "1.3.4"
+            printf 'RAINGIT_VERSION_CODE=%s\n' "4"
           } >> "$GITHUB_ENV"
           echo '固定 Release 签名已就绪'
 
@@ -94,7 +94,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION_NAME="1.3.${{ github.run_number }}"
+          VERSION_NAME="1.3.4"
           APK_NAME="RainGit-v${VERSION_NAME}.apk"
           SRC="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -type f | head -n 1)"
           cp "$SRC" "$APK_NAME"
@@ -105,7 +105,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RainGit-release-${{ github.run_number }}
+          name: RainGit-release
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           compression-level: 0
@@ -124,7 +124,7 @@ jobs:
           git push origin --delete "${TAG}" 2>/dev/null || true
           NOTES="## RainGit ${TAG}
 
-          - 版本号：\`${VERSION_NAME}\`（versionCode: \`${{ github.run_number }}\`）
+          - 版本号：\`${VERSION_NAME}\`（versionCode: \`4\`）
           - 提交：[\`${SHORT_SHA}\`](${{ github.server_url }}/${{ github.repository }}/commit/${COMMIT_SHA})
           - 构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')
 

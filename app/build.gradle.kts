@@ -15,7 +15,7 @@ android {
         versionCode = System.getenv("RAINGIT_VERSION_CODE")?.toIntOrNull()
             ?: System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
             ?: 1
-        versionName = System.getenv("RAINGIT_VERSION_NAME") ?: "1.3.0"
+        versionName = System.getenv("RAINGIT_VERSION_NAME") ?: "1.3.4"
     }
 
     signingConfigs {
