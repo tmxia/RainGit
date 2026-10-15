@@ -266,13 +266,13 @@ internal data class RunAppearance(val name: String, val color: Color, val icon: 
 
 @Composable
 internal fun runAppearance(status: String, conclusion: String): RunAppearance {
-    // 明暗主题用两套 GitHub 官方状态色，保证对比度
+    
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val success = Color(if (dark) 0xFF3FB950 else 0xFF1A7F37)  // 绿
-    val danger  = Color(if (dark) 0xFFF85149 else 0xFFCF222E)  // 红
-    val info    = Color(if (dark) 0xFF58A6FF else 0xFF0969DA)  // 蓝
-    val warn    = Color(if (dark) 0xFFD29922 else 0xFF9A6700)  // 黄
-    val muted   = Color(if (dark) 0xFF8B949E else 0xFF57606A)  // 灰
+    val success = Color(if (dark) 0xFF3FB950 else 0xFF1A7F37)  
+    val danger  = Color(if (dark) 0xFFF85149 else 0xFFCF222E)  
+    val info    = Color(if (dark) 0xFF58A6FF else 0xFF0969DA)  
+    val warn    = Color(if (dark) 0xFFD29922 else 0xFF9A6700)  
+    val muted   = Color(if (dark) 0xFF8B949E else 0xFF57606A)  
 
     return when {
         conclusion == "success" -> RunAppearance("成功", success, Icons.Rounded.CheckCircle)
