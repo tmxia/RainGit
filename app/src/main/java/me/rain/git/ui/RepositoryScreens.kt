@@ -210,6 +210,8 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
     var email by rememberSaveable(vm.account?.login) { mutableStateOf(vm.store.email) }
     var confirmLogout by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showPathDialog by remember { mutableStateOf(false) }
+    var pathInput by remember { mutableStateOf(vm.store.root().path) }
     LazyColumn(Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -273,7 +275,14 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
                     Spacer(Modifier.height(7.dp))
                     Text(vm.store.root().path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = pickDir, modifier = Modifier.fillMaxWidth()) { Text("选择仓库目录") }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { pathInput = vm.store.root().path; showPathDialog = true }, modifier = Modifier.weight(1f)) {
+                            Text("输入目录路径")
+                        }
+                        OutlinedButton(onClick = pickDir, modifier = Modifier.weight(1f)) {
+                            Text("系统选择")
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         TextButton(onClick = grant) { Text("存储权限") }
                         TextButton(onClick = vm::usePrivateRoot) { Text("恢复默认目录") }
@@ -295,6 +304,36 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
                 Icon(Icons.Rounded.Logout, null, Modifier.size(19.dp)); Spacer(Modifier.width(8.dp)); Text("退出 GitHub 账号")
             }
         }
+    }
+    if (showPathDialog) {
+        AlertDialog(
+            onDismissRequest = { showPathDialog = false },
+            title = { Text("设置工作目录") },
+            text = {
+                Column {
+                    Text("请输入绝对路径，例如 /sdcard/RainGit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = pathInput,
+                        onValueChange = { pathInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("路径") },
+                        placeholder = { Text("/sdcard/RainGit") }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("提示：写 /sdcard 需要先在系统设置授予「所有文件访问」权限（点下方"存储权限"按钮）",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPathDialog = false
+                    vm.setRootPath(pathInput)
+                }) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { showPathDialog = false }) { Text("取消") } }
+        )
     }
     if (showAbout) AboutDialog(openUrl) { showAbout = false }
     if (confirmLogout) AlertDialog(onDismissRequest = { confirmLogout = false },

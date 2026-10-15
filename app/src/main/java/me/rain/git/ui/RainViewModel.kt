@@ -249,6 +249,13 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         message = "已切换至应用专属目录"
     }
 
+    fun setRootPath(path: String) = launchAction {
+        require(!downloading) { "请等待下载完成后再切换目录" }
+        val root = store.setRootPath(path)
+        reloadLocal()
+        message = "工作目录：${root.path}"
+    }
+
     fun openRemote(repo: RemoteRepo, tab: Int = 0) {
         if (busy) return
         contextVersion++

@@ -82,11 +82,12 @@ class SecureStore(private val context: Context) {
 
     fun root(): File {
         val saved = prefs.getString("root", null)?.let(::File)
-        val dir = if (saved != null && (saved.path.startsWith(context.filesDir.path) ||
-                    (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager() && (saved.path == "/storage/emulated/0" || saved.path.startsWith("/storage/emulated/0/"))))) {
-            saved
-        } else defaultRoot
-        require(dir.isDirectory || dir.mkdirs()) { "无法建立仓库目录" }
+        val dir = if (saved != null) saved else defaultRoot
+        // 尝试建立；失败则回退默认目录
+        if (!dir.isDirectory && !dir.mkdirs()) {
+            require(defaultRoot.isDirectory || defaultRoot.mkdirs()) { "无法建立仓库目录" }
+            return defaultRoot.canonicalFile
+        }
         return dir.canonicalFile
     }
 
@@ -105,4 +106,23 @@ class SecureStore(private val context: Context) {
     }
 
     fun resetRoot() { prefs.edit().remove("root").apply() }
+
+    /**
+     * 手动输入路径设置工作目录。
+     * 不做 SAF 限制，只检查路径是绝对路径、可写、非空。
+     * 写 /sdcard 仍需要 MANAGE_EXTERNAL_STORAGE（系统硬规定）。
+     */
+    fun setRootPath(path: String): File {
+        val trimmed = path.trim()
+        require(trimmed.isNotBlank()) { "路径不能为空" }
+        val candidate = File(trimmed)
+        require(candidate.isAbsolute) { "请填写绝对路径，例如 /sdcard/RainGit" }
+        if (!candidate.isDirectory && !candidate.mkdirs()) {
+            throw IllegalArgumentException("无法创建或写入目录：$trimmed（请检查路径，或授予「所有文件访问」权限）")
+        }
+        require(candidate.canWrite()) { "目录不可写：$trimmed" }
+        val canonical = candidate.canonicalFile
+        prefs.edit().putString("root", canonical.path).apply()
+        return canonical
+    }
 }
