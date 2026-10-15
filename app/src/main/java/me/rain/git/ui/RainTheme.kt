@@ -107,7 +107,7 @@ internal fun FullScreenPanel(close: () -> Unit, content: @Composable () -> Unit)
         usePlatformDefaultWidth = false, decorFitsSystemWindows = false
     )) {
         TransparentSystemBars()
-        // Paint behind system bars; apply safe insets only to interactive content.
+        
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) { content() }
         }

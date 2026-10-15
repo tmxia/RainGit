@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.sin
 
-/** 只在活动任务期间绘制连续正弦波；空闲时保持高度，避免页面跳动。 */
+
 @Composable
 internal fun WaveLoadingBar(active: Boolean, modifier: Modifier = Modifier) {
     val tint = MaterialTheme.colorScheme.primary

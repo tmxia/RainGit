@@ -39,7 +39,7 @@ fun RainApp(
     RainTheme(dark) {
         TransparentSystemBars()
 
-        // 首次启动：无权限时弹窗引导授权
+        
         var permissionPromptShown by androidx.compose.runtime.saveable.rememberSaveable {
             androidx.compose.runtime.mutableStateOf(false)
         }
@@ -152,7 +152,7 @@ fun RainApp(
                     targetState = model.screen,
                     transitionSpec = {
                         if (targetState == "detail" || initialState == "detail") {
-                            // repository-shared-bounds: matched card carries the motion; scene content only fades.
+                            
                             fadeIn(tween(260, delayMillis = 30)) togetherWith fadeOut(tween(125))
                         } else {
                             val pages = listOf("home", "local", "actions", "settings")

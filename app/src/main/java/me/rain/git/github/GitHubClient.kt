@@ -70,7 +70,12 @@ class GitHubClient(private val token: () -> String?) {
 
     suspend fun me() = withContext(Dispatchers.IO) {
         val j = JSONObject(call(endpoint("/user")))
-        Account(j.getString("login"), j.optString("name").takeUnless { it.isBlank() } ?: j.getString("login"), j.optString("avatar_url"), j.optLong("id"))
+        Account(
+            j.getString("login"),
+            j.optString("name").takeUnless { it.isBlank() || it == "null" } ?: j.getString("login"),
+            j.optString("avatar_url").takeUnless { it == "null" }.orEmpty(),
+            j.optLong("id"),
+        )
     }
 
     suspend fun repos(): List<RemoteRepo> = withContext(Dispatchers.IO) {
@@ -145,7 +150,7 @@ class GitHubClient(private val token: () -> String?) {
             JSONObject().put("title", title.trim()).put("body", description.trim()).toString())).getInt("number")
     }
 
-    /** 拉取 workflow YAML 文件内容（用于解析 workflow_dispatch.inputs） */
+    
     suspend fun workflowContent(r: RemoteRepo, path: String): String = withContext(Dispatchers.IO) {
         val body = call(endpoint("${repoPath(r)}/contents/$path"))
         val json = JSONObject(body)
@@ -172,7 +177,7 @@ class GitHubClient(private val token: () -> String?) {
             j.optString("head_sha"), j.optString("html_url"), j.optString("created_at"))
     }
 
-    // Resolve each short-lived link at download time. Never forward the GitHub token to storage hosts.
+    
     suspend fun download(r: RemoteRepo, suffix: String, destination: File,
         progress: suspend (Long, Long) -> Unit = { _, _ -> }) = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(endpoint("${repoPath(r)}$suffix"))
@@ -254,7 +259,7 @@ class GitHubClient(private val token: () -> String?) {
             ZipFile(cache).use { zip ->
                 val entries = zip.entries().asSequence()
                     .filter { !it.isDirectory && it.name.endsWith(".txt", true) }.toList()
-                // GitHub includes both a root job log and the same output split into step files.
+                
                 val jobLog = Regex("^\\d+_(.+)\\.txt$", RegexOption.IGNORE_CASE)
                 val aggregateJobs = entries.filter { '/' !in it.name }
                     .mapNotNull { jobLog.matchEntire(it.name)?.groupValues?.get(1) }.toSet()

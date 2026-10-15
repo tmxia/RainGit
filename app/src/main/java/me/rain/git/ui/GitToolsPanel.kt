@@ -45,7 +45,7 @@ internal fun GitToolsPanel(vm: RainViewModel, close: () -> Unit) {
                     Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }, enabled = !vm.busy)
                 }
             }
-            // Git operations complete behind this panel; expose feedback here as well.
+            
             vm.message?.let { message ->
                 Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.padding(16.dp, 8.dp), shape = RoundedCornerShape(12.dp)) {
                     Text(message, Modifier.fillMaxWidth().padding(12.dp), style = MaterialTheme.typography.bodySmall)

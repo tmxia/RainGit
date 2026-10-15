@@ -11,11 +11,11 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 
-/**
- * Lightweight, dependency-free token colouring for the mobile editor.
- * It NEVER changes the text itself, so cursor/selection offsets remain identical.
- * Syntax analysis is capped at the first 120k characters to protect typing latency.
- */
+
+
+
+
+
 @Composable
 internal fun rememberCodeSyntax(path: String): VisualTransformation {
     val dark = MaterialTheme.colorScheme.background.luminance() < .5f

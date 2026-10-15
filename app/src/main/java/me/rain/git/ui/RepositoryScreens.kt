@@ -85,7 +85,7 @@ private fun RepositoryTile(
     sharedScope: SharedTransitionScope?, visibilityScope: AnimatedVisibilityScope?
 ) {
     val favored = repo.fullName in vm.favoriteRepos
-    // Matches the detail hero using the remote repository's stable full name.
+    
     val cardMotion = if (sharedScope != null && visibilityScope != null) {
         with(sharedScope) {
             Modifier.sharedBounds(
@@ -223,7 +223,13 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
                     }
                     Spacer(Modifier.width(13.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(vm.account?.displayName ?: "GitHub", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            vm.account?.displayName?.takeUnless { it.isBlank() || it == "null" }
+                                ?: vm.account?.login
+                                ?: "GitHub",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         Text("@${vm.account?.login.orEmpty()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                     Icon(Icons.Rounded.Verified, null, tint = MaterialTheme.colorScheme.primary)
@@ -351,8 +357,8 @@ internal fun RepositoryScreen(
 ) {
     val tabState = rememberSaveableStateHolder()
     val repositoryKey = vm.selectedRepo?.fullName ?: vm.selectedDir?.path.orEmpty()
-    // Retain the matched repository while the reverse transition is running.
-    // closeDetail() clears selectedRepo before the outgoing scene is disposed.
+    
+    
     val transitionRepo = remember { vm.selectedRepo }
     Column(Modifier.fillMaxSize()) {
         val dir = vm.selectedDir

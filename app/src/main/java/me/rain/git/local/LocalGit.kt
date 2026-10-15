@@ -17,9 +17,9 @@ class LocalGit(private val token: () -> String?) {
         "x-access-token", token() ?: throw IOException("GitHub 登录已失效")
     )
 
-    // JGit 6.10's automatic GC uses java.lang.ProcessHandle, unavailable on Android.
-    // Both limits must be disabled: JGit checks pack count separately from loose objects.
-    // Keep this in sync with the targeted ProcessHandle rule in proguard-rules.pro.
+    
+    
+    
     private fun openGit(dir: File): Git {
         val git = Git.open(dir)
         try {
@@ -52,9 +52,9 @@ class LocalGit(private val token: () -> String?) {
         try {
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
-                // Clone initializes its repository before invoking this callback.
-                // Persist the limits before its first fetch can trigger autoGC;
-                // FileRepository.getConfig() reloads the changed config from disk.
+                
+                
+                
                 .setTransportConfigCallback { openGit(temporary).close() }
                 .call().use { }
             val oldDist = File(dir, "dist")

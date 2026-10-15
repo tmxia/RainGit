@@ -58,7 +58,10 @@ class SecureStore(private val context: Context) {
 
     fun cachedAccount(): me.rain.git.github.Account? {
         val login = prefs.getString("cached_login", null) ?: return null
-        return me.rain.git.github.Account(login, prefs.getString("cached_name", login).orEmpty(), "", prefs.getLong("cached_id", 0))
+        val name = prefs.getString("cached_name", null)
+            ?.takeUnless { it.isBlank() || it == "null" }
+            ?: login
+        return me.rain.git.github.Account(login, name, "", prefs.getLong("cached_id", 0))
     }
 
     var favoriteRepos: Set<String>
@@ -83,7 +86,7 @@ class SecureStore(private val context: Context) {
     fun root(): File {
         val saved = prefs.getString("root", null)?.let(::File)
         val dir = if (saved != null) saved else defaultRoot
-        // 尝试建立；失败则回退默认目录
+        
         if (!dir.isDirectory && !dir.mkdirs()) {
             require(defaultRoot.isDirectory || defaultRoot.mkdirs()) { "无法建立仓库目录" }
             return defaultRoot.canonicalFile
@@ -102,7 +105,7 @@ class SecureStore(private val context: Context) {
         val volumeId = id.substring(0, colon)
         val relative = id.substring(colon + 1)
 
-        // primary 卷 = /storage/emulated/0；其他卷（如 BA73-022B）= /storage/<卷 ID>
+        
         val base: File = if (volumeId.equals("primary", ignoreCase = true)) {
             File("/storage/emulated/0")
         } else {
@@ -122,11 +125,11 @@ class SecureStore(private val context: Context) {
 
     fun resetRoot() { prefs.edit().remove("root").apply() }
 
-    /**
-     * 手动输入路径设置工作目录。
-     * 不做 SAF 限制，只检查路径是绝对路径、可写、非空。
-     * 写 /sdcard 仍需要 MANAGE_EXTERNAL_STORAGE（系统硬规定）。
-     */
+    
+
+
+
+
     fun setRootPath(path: String): File {
         val trimmed = path.trim()
         require(trimmed.isNotBlank()) { "路径不能为空" }
