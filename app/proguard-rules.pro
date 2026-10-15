@@ -29,3 +29,8 @@
 # GC.PidLock path is never used by this app. Do not enable manual/automatic
 # JGit GC without providing an Android-compatible PID implementation first.
 -dontwarn java.lang.ProcessHandle
+
+
+# SnakeYAML（解析 workflow inputs）
+-keep class org.yaml.snakeyaml.** { *; }
+-dontwarn org.yaml.snakeyaml.**

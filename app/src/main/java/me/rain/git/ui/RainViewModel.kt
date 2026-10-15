@@ -491,6 +491,15 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         message = "Issue #$number 已创建"
     }
 
+    suspend fun loadWorkflowInputs(workflow: Workflow): List<WorkflowInput> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val r = selectedRepo ?: return@runCatching emptyList()
+                val yaml = client.workflowContent(r, workflow.path)
+                WorkflowInputParser.parse(yaml)
+            }.getOrDefault(emptyList())
+        }
+
     fun dispatch(workflow: Workflow, branch: String, inputs: String) = launchAction {
         client.dispatch(selectedRepo ?: return@launchAction, workflow, branch, inputs)
         message = "已提交工作流运行请求；GitHub 可能需要几秒才会显示运行记录"

@@ -145,6 +145,14 @@ class GitHubClient(private val token: () -> String?) {
             JSONObject().put("title", title.trim()).put("body", description.trim()).toString())).getInt("number")
     }
 
+    /** 拉取 workflow YAML 文件内容（用于解析 workflow_dispatch.inputs） */
+    suspend fun workflowContent(r: RemoteRepo, path: String): String = withContext(Dispatchers.IO) {
+        val body = call(endpoint("${repoPath(r)}/contents/$path"))
+        val json = JSONObject(body)
+        val b64 = json.getString("content").replace("\n", "").replace("\r", "")
+        String(android.util.Base64.decode(b64, android.util.Base64.DEFAULT), Charsets.UTF_8)
+    }
+
     suspend fun dispatch(r: RemoteRepo, w: Workflow, branch: String, inputsText: String) = withContext(Dispatchers.IO) {
         require(branch.isNotBlank()) { "请输入分支" }
         val inputs = if (inputsText.isBlank()) JSONObject() else JSONObject(inputsText)

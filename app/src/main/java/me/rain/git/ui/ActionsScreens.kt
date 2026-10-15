@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import me.rain.git.github.WorkflowInput
+import me.rain.git.github.WorkflowInputParser
 import me.rain.git.github.Run
 import me.rain.git.github.Workflow
 
@@ -135,18 +137,72 @@ internal fun ActionsScreen(vm: RainViewModel, openUrl: (String) -> Unit) {
         }
         advancedWorkflow?.let { w ->
             var ref by remember(w.id) { mutableStateOf(vm.selectedRepo?.defaultBranch.orEmpty()) }
-            var inputs by remember(w.id) { mutableStateOf("") }
+            var inputDefs by remember(w.id) { mutableStateOf<List<WorkflowInput>?>(null) }
+            var values by remember(w.id) { mutableStateOf<Map<String, String>>(emptyMap()) }
+            var showAdvanced by remember(w.id) { mutableStateOf(false) }
+            var advancedJson by remember(w.id) { mutableStateOf("") }
+
+            LaunchedEffect(w.id) {
+                val defs = vm.loadWorkflowInputs(w)
+                inputDefs = defs
+                values = defs.associate { it.name to it.defaultValue }
+            }
+
             AlertDialog(
                 onDismissRequest = { advancedWorkflow = null },
                 title = { Text("运行 · ${w.name}") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    ) {
                         OutlinedTextField(ref, { ref = it }, label = { Text("分支或 Git ref") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(inputs, { inputs = it }, label = { Text("Inputs JSON（可留空）") }, minLines = 2, maxLines = 5, modifier = Modifier.fillMaxWidth())
-                        Text("工作流需支持 workflow_dispatch。需要输入参数的工作流请填写 JSON。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                        when {
+                            inputDefs == null -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("解析工作流参数中…", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            inputDefs!!.isEmpty() -> {
+                                Text("此工作流无需额外参数。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            else -> {
+                                inputDefs!!.forEach { def ->
+                                    WorkflowInputField(
+                                        def = def,
+                                        value = values[def.name] ?: def.defaultValue,
+                                        onChange = { v -> values = values + (def.name to v) }
+                                    )
+                                }
+                            }
+                        }
+
+                        TextButton(onClick = { showAdvanced = !showAdvanced }) {
+                            Text(if (showAdvanced) "隐藏高级 JSON" else "高级 JSON", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (showAdvanced) {
+                            OutlinedTextField(
+                                advancedJson, { advancedJson = it },
+                                label = { Text("Inputs JSON（留空则用上方表单）") },
+                                minLines = 2, maxLines = 5, modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 },
-                confirmButton = { TextButton(onClick = { vm.dispatch(w, ref, inputs); advancedWorkflow = null }, enabled = ref.isNotBlank() && !vm.busy) { Text("开始运行") } },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val json = if (advancedJson.isNotBlank()) advancedJson
+                                       else buildInputsJson(inputDefs.orEmpty(), values)
+                            vm.dispatch(w, ref, json)
+                            advancedWorkflow = null
+                        },
+                        enabled = ref.isNotBlank() && !vm.busy
+                    ) { Text("开始运行") }
+                },
                 dismissButton = { TextButton(onClick = { advancedWorkflow = null }) { Text("取消") } }
             )
         }
@@ -331,5 +387,81 @@ private fun RunScreen(vm: RainViewModel, run: Run, openUrl: (String) -> Unit) {
         }
         vm.lastDownloadedPath?.let { path -> item { DownloadedFileCard(path) } }
         if (vm.artifacts.isEmpty()) item { EmptyPanel(Icons.Rounded.Archive, "暂无构建产物", "工作流成功上传 Artifact 后将显示在这里") }
+    }
+}
+
+private fun buildInputsJson(defs: List<WorkflowInput>, values: Map<String, String>): String {
+    if (defs.isEmpty()) return ""
+    val obj = org.json.JSONObject()
+    defs.forEach { def ->
+        val v = values[def.name] ?: def.defaultValue
+        if (def.required || v.isNotEmpty()) {
+            when (def.type) {
+                "boolean" -> obj.put(def.name, v.equals("true", ignoreCase = true))
+                else -> obj.put(def.name, v)
+            }
+        }
+    }
+    return obj.toString()
+}
+
+@Composable
+private fun WorkflowInputField(
+    def: WorkflowInput,
+    value: String,
+    onChange: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val label = def.name + if (def.required) " *" else ""
+        when (def.type) {
+            "choice" -> {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onChange,
+                    label = { Text(label) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (def.description.isNotBlank()) {
+                    Text(def.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (def.options.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        def.options.forEach { opt ->
+                            FilterChip(
+                                selected = value == opt,
+                                onClick = { onChange(opt) },
+                                label = { Text(opt) }
+                            )
+                        }
+                    }
+                }
+            }
+            "boolean" -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = value.equals("true", ignoreCase = true),
+                        onCheckedChange = { onChange(if (it) "true" else "false") }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(label, style = MaterialTheme.typography.labelMedium)
+                        if (def.description.isNotBlank()) {
+                            Text(def.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            else -> {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onChange,
+                    label = { Text(label) },
+                    placeholder = { if (def.description.isNotBlank()) Text(def.description, maxLines = 1) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }

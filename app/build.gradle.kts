@@ -64,5 +64,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.eclipse.jgit:org.eclipse.jgit:5.13.3.202401111512-r")
     implementation("org.slf4j:slf4j-nop:2.0.16")
+    implementation("org.yaml:snakeyaml:1.33")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
