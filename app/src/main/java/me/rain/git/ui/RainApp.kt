@@ -40,7 +40,7 @@ fun RainApp(
         TransparentSystemBars()
 
         // 首次启动：无权限时弹窗引导授权
-        var permissionPromptShown by androidx.compose.runtime.rememberSaveable {
+        var permissionPromptShown by androidx.compose.runtime.saveable.rememberSaveable {
             androidx.compose.runtime.mutableStateOf(false)
         }
         if (!hasStoragePermission && !permissionPromptShown) {
