@@ -15,27 +15,35 @@ data class WorkflowInput(
 
 object WorkflowInputParser {
     /** 从 workflow YAML 文本解析 workflow_dispatch.inputs；解析失败返回空表 */
-    @Suppress("UNCHECKED_CAST")
     fun parse(yamlText: String): List<WorkflowInput> {
         return try {
-            @Suppress("UNCHECKED_CAST")
-            val root = Yaml().load(yamlText) as? Map<String, Any?> ?: return emptyList()
-            // YAML 1.1：`on:` 可能被解析成布尔 true
-            val onBlock = (root["on"] ?: root[true]) as? Map<String, Any?> ?: return emptyList()
-            val wd = onBlock["workflow_dispatch"] as? Map<String, Any?> ?: return emptyList()
-            val inputs = wd["inputs"] as? Map<String, Any?> ?: return emptyList()
+            val loaded: Any? = Yaml().load(yamlText)
+            val root = loaded as? Map<*, *> ?: return emptyList()
 
-            inputs.map { (name, specRaw) ->
-                val spec = specRaw as? Map<String, Any?> ?: emptyMap()
+            // 找 "on" 键（YAML 1.1 可能把 on 解析成布尔 true）
+            val onRaw = root.entries.firstOrNull { it.key == "on" || it.key == true }?.value
+            val onBlock = onRaw as? Map<*, *> ?: return emptyList()
+
+            val wdRaw = onBlock.entries.firstOrNull { it.key == "workflow_dispatch" }?.value
+            val wd = wdRaw as? Map<*, *> ?: return emptyList()
+
+            val inputsRaw = wd.entries.firstOrNull { it.key == "inputs" }?.value
+            val inputs = inputsRaw as? Map<*, *> ?: return emptyList()
+
+            inputs.mapNotNull { entry ->
+                val name = entry.key as? String ?: return@mapNotNull null
+                val spec = entry.value as? Map<*, *> ?: emptyMap<Any?, Any?>()
+
                 val type = (spec["type"] as? String) ?: "string"
-                val optionsRaw = spec["options"] as? List<Any?>
+                val optionsRaw = spec["options"] as? List<*>
+
                 WorkflowInput(
                     name = name,
                     description = (spec["description"] as? String)?.trim().orEmpty(),
                     required = (spec["required"] as? Boolean) ?: false,
                     defaultValue = spec["default"]?.toString().orEmpty(),
                     type = type,
-                    options = optionsRaw?.map { it.toString() } ?: emptyList(),
+                    options = optionsRaw?.mapNotNull { it?.toString() } ?: emptyList(),
                 )
             }
         } catch (_: Throwable) {
