@@ -1,0 +1,468 @@
+package me.rain.git.ui
+
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import java.util.Locale
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import me.rain.git.github.WorkflowInput
+import me.rain.git.github.WorkflowInputParser
+import me.rain.git.github.Run
+import me.rain.git.github.Workflow
+
+@Composable
+internal fun ActionsScreen(vm: RainViewModel, openUrl: (String) -> Unit) {
+    if (vm.selectedRepo == null) { EmptyPanel(Icons.Rounded.Terminal, "仅支持 GitHub 仓库", "请选择关联 GitHub 的仓库"); return }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(vm.selectedRepo?.fullName, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) { vm.pollActions(); delay(4000) }
+        }
+    }
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) vm.pauseActions()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer); vm.pauseActions() }
+    }
+    val chosen = vm.chosenRun
+    if (chosen != null) {
+        RunScreen(vm, chosen, openUrl)
+    } else {
+        var advancedWorkflow by remember(vm.selectedRepo) { mutableStateOf<Workflow?>(null) }
+        var filter by remember { mutableIntStateOf(0) }
+        val visibleRuns = vm.runs.filter { run ->
+            when (filter) {
+                1 -> run.conclusion == "failure" || run.conclusion == "timed_out"
+                2 -> run.status != "completed"
+                3 -> run.conclusion == "success"
+                else -> true
+            }
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item { Text(vm.actionsStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item {
+                val latest = vm.runs.firstOrNull()
+                if (latest != null) {
+                    val look = runAppearance(latest.status, latest.conclusion)
+                    Surface(
+                        onClick = { vm.chooseRun(latest) },
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)),
+                        shape = RoundedCornerShape(23.dp)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(17.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(look.icon, null, Modifier.size(31.dp), tint = look.color)
+                                Spacer(Modifier.width(11.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("最新构建", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(latest.name.ifBlank { "GitHub Actions" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                StateLabel(look.name, look.color)
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            RunFacts(latest)
+                            Spacer(Modifier.height(4.dp))
+                            Text("${latest.created.take(16).replace('T', ' ')} UTC", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(9.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("查看任务步骤与 APK", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Rounded.ArrowForward, null, tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
+            item { SectionHeading("工作流", "默认分支一键运行，参数按需设置") {
+                IconButton(onClick = vm::refreshActions, enabled = !vm.busy) { Icon(Icons.Rounded.Refresh, "刷新构建") }
+            } }
+            items(vm.workflows, key = { "workflow-${it.id}" }) { workflow ->
+                val active = workflow.state == "active"
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)), shape = RoundedCornerShape(18.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.PlayCircleOutline, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(workflow.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(if (active) "默认分支 · ${vm.selectedRepo?.defaultBranch.orEmpty()}" else "已禁用", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { advancedWorkflow = workflow }, enabled = active && !vm.busy) { Icon(Icons.Rounded.Tune, "参数") }
+                        Button(onClick = { vm.dispatch(workflow, vm.selectedRepo?.defaultBranch.orEmpty(), "") }, enabled = active && !vm.busy,
+                            contentPadding = PaddingValues(horizontal = 12.dp)) { Text("运行") }
+                    }
+                }
+            }
+            if (vm.workflows.isEmpty()) item {
+                EmptyPanel(Icons.Rounded.Terminal, "还没有发现工作流", "检查 .github/workflows 是否存在，或刷新列表")
+            }
+            item {
+                Spacer(Modifier.height(8.dp))
+                SectionHeading("最近构建", "最新 ${vm.runs.size} 次运行")
+                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    listOf("全部", "失败", "进行中", "成功").forEachIndexed { index, title ->
+                        FilterChip(selected = filter == index, onClick = { filter = index }, label = { Text(title) })
+                    }
+                }
+            }
+            items(visibleRuns, key = { "run-${it.id}" }) { run ->
+                RunTile(run, onClick = { vm.chooseRun(run) }, onLogs = { vm.openRunLogs(run) }, enabled = !vm.busy)
+            }
+            if (visibleRuns.isEmpty()) item { EmptyPanel(Icons.Rounded.History, "暂无匹配的构建", "可以切换状态筛选或刷新列表") }
+        }
+        advancedWorkflow?.let { w ->
+            var ref by remember(w.id) { mutableStateOf(vm.selectedRepo?.defaultBranch.orEmpty()) }
+            var inputDefs by remember(w.id) { mutableStateOf<List<WorkflowInput>?>(null) }
+            var values by remember(w.id) { mutableStateOf<Map<String, String>>(emptyMap()) }
+            var showAdvanced by remember(w.id) { mutableStateOf(false) }
+            var advancedJson by remember(w.id) { mutableStateOf("") }
+
+            LaunchedEffect(w.id) {
+                val defs = vm.loadWorkflowInputs(w)
+                inputDefs = defs
+                values = defs.associate { it.name to it.defaultValue }
+            }
+
+            AlertDialog(
+                onDismissRequest = { advancedWorkflow = null },
+                title = { Text("运行 · ${w.name}") },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    ) {
+                        OutlinedTextField(ref, { ref = it }, label = { Text("分支或 Git ref") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+
+                        when {
+                            inputDefs == null -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("解析工作流参数中…", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            inputDefs!!.isEmpty() -> {
+                                Text("此工作流无需额外参数。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            else -> {
+                                inputDefs!!.forEach { def ->
+                                    WorkflowInputField(
+                                        def = def,
+                                        value = values[def.name] ?: def.defaultValue,
+                                        onChange = { v -> values = values + (def.name to v) }
+                                    )
+                                }
+                            }
+                        }
+
+                        TextButton(onClick = { showAdvanced = !showAdvanced }) {
+                            Text(if (showAdvanced) "隐藏高级 JSON" else "高级 JSON", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (showAdvanced) {
+                            OutlinedTextField(
+                                advancedJson, { advancedJson = it },
+                                label = { Text("Inputs JSON（留空则用上方表单）") },
+                                minLines = 2, maxLines = 5, modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val json = if (advancedJson.isNotBlank()) advancedJson
+                                       else buildInputsJson(inputDefs.orEmpty(), values)
+                            vm.dispatch(w, ref, json)
+                            advancedWorkflow = null
+                        },
+                        enabled = ref.isNotBlank() && !vm.busy
+                    ) { Text("开始运行") }
+                },
+                dismissButton = { TextButton(onClick = { advancedWorkflow = null }) { Text("取消") } }
+            )
+        }
+    }
+}
+
+@Composable
+private fun RunFacts(run: Run) {
+    Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(8.dp)) {
+            Text("运行 #${run.number}", Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+        }
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(8.dp)) {
+            Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.AccountTree, null, Modifier.size(13.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(run.branch.ifBlank { "未知分支" }, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (run.sha.isNotBlank()) {
+            Text(run.sha.take(7), style = MaterialTheme.typography.labelSmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun RunTile(run: Run, onClick: () -> Unit, onLogs: () -> Unit, enabled: Boolean) {
+    val look = runAppearance(run.status, run.conclusion)
+    Surface(onClick = onClick, enabled = enabled, color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(look.icon, null, Modifier.size(23.dp), tint = look.color)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(run.name.ifBlank { "工作流" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(5.dp))
+                    RunFacts(run)
+                }
+                StateLabel(look.name, look.color)
+            }
+            Spacer(Modifier.height(9.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(run.created.take(16).replace('T', ' '), modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onLogs, enabled = enabled) {
+                    Icon(Icons.Rounded.Description, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("日志")
+                }
+                Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RunScreen(vm: RainViewModel, run: Run, openUrl: (String) -> Unit) {
+    val look = runAppearance(run.status, run.conclusion)
+    var expanded by remember(run.id) { mutableStateOf<Map<Long, Boolean>>(emptyMap()) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(vm.actionsStatus, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                IconButton(onClick = vm::refreshActions) { Icon(Icons.Rounded.Refresh, "立即刷新") }
+            }
+            TextButton(onClick = vm::backRun) { Icon(Icons.Rounded.ArrowBack, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("返回构建记录") }
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)), shape = RoundedCornerShape(22.dp)) {
+                Column(Modifier.padding(17.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(look.icon, null, Modifier.size(30.dp), tint = look.color)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(run.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(5.dp))
+                            RunFacts(run)
+                        }
+                        StateLabel(look.name, look.color)
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = vm::readLogs, enabled = !vm.busy, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Rounded.Description, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("任务日志")
+                        }
+                        FilledTonalButton(onClick = { vm.controlRun("rerun") }, enabled = !vm.busy && run.status == "completed", modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Rounded.Refresh, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("重新运行")
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { vm.controlRun("rerun-failed-jobs") }, enabled = !vm.busy && run.conclusion == "failure") { Text("只重跑失败任务") }
+                        Spacer(Modifier.weight(1f))
+                        if (run.status != "completed") TextButton(onClick = { vm.controlRun("cancel") }, enabled = !vm.busy) { Text("取消运行") }
+                        IconButton(onClick = { openUrl(run.url) }) { Icon(Icons.Rounded.OpenInNew, "浏览器查看") }
+                    }
+                }
+            }
+        }
+        item {
+            SectionHeading("任务步骤", "${vm.jobs.size} 个任务 · 每 4 秒检查状态")
+            if (run.status != "completed") TextButton(onClick = { openUrl(run.url) }) {
+                Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("网页实时日志")
+            }
+        }
+        items(vm.jobs, key = { "job-${it.id}" }) { job ->
+            val state = runAppearance(job.status, job.conclusion)
+            val isExpanded = expanded[job.id] ?: (job.status == "in_progress" || job.conclusion in listOf("failure", "timed_out"))
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)), shape = RoundedCornerShape(16.dp)) {
+                Column {
+                    Row(Modifier.fillMaxWidth().clickable { expanded = expanded + (job.id to !isExpanded) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(state.icon, null, Modifier.size(20.dp), tint = state.color)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(job.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(state.name, style = MaterialTheme.typography.labelSmall, color = state.color)
+                        }
+                        TextButton(onClick = { vm.readJobLogs(job.id) }, enabled = !vm.busy) {
+                            Icon(Icons.Rounded.Description, null, Modifier.size(16.dp)); Text("日志")
+                        }
+                        Icon(if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
+                    }
+                    AnimatedVisibility(visible = isExpanded, enter = fadeIn(tween(130)), exit = fadeOut(tween(90))) {
+                        Column {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        job.steps.forEach { step ->
+                            val stepLook = runAppearance(step.status, step.conclusion)
+                            val failed = step.conclusion in listOf("failure", "timed_out")
+                            Row(Modifier.fillMaxWidth().clickable(enabled = !vm.busy) { vm.readJobLogs(job.id) }
+                                .padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(stepLook.icon, stepLook.name, Modifier.size(16.dp), tint = stepLook.color)
+                                Spacer(Modifier.width(10.dp))
+                                Text(step.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (failed) FontWeight.SemiBold else FontWeight.Normal)
+                                if (failed || step.status == "in_progress") {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stepLook.name, style = MaterialTheme.typography.labelSmall, color = stepLook.color)
+                                }
+                            }
+                        }
+                        }
+                    }
+                }
+            }
+        }
+        item { SectionHeading("构建产物", "${vm.artifacts.size} 个文件 · 直接下载到项目 / dist") }
+        if (vm.downloadState != null) item {
+            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Text(vm.downloadState.orEmpty(), style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(6.dp))
+                    WaveLoadingBar(vm.downloading, Modifier.fillMaxWidth())
+                    TextButton(onClick = vm::cancelDownload) { Text("取消下载") }
+                }
+            }
+        }
+        items(vm.artifacts, key = { "artifact-${it.id}" }) { artifact ->
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Inventory2, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(9.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(artifact.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+                            Text("${String.format(Locale.US, "%.2f MiB", artifact.size / 1048576.0)}${if (artifact.expired) " · 已过期" else ""}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = { vm.downloadArtifact(artifact, true) }, modifier = Modifier.weight(1f), enabled = !vm.busy && !vm.downloading && !artifact.expired) {
+                            Icon(Icons.Rounded.Android, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("下载 APK")
+                        }
+                        OutlinedButton(onClick = { vm.downloadArtifact(artifact, false) }, modifier = Modifier.weight(1f), enabled = !vm.busy && !vm.downloading && !artifact.expired) { Text("下载 ZIP") }
+                    }
+                }
+            }
+        }
+        vm.lastDownloadedPath?.let { path -> item { DownloadedFileCard(path) } }
+        if (vm.artifacts.isEmpty()) item { EmptyPanel(Icons.Rounded.Archive, "暂无构建产物", "工作流成功上传 Artifact 后将显示在这里") }
+    }
+}
+
+private fun buildInputsJson(defs: List<WorkflowInput>, values: Map<String, String>): String {
+    if (defs.isEmpty()) return ""
+    val obj = org.json.JSONObject()
+    defs.forEach { def ->
+        val v = values[def.name] ?: def.defaultValue
+        if (def.required || v.isNotEmpty()) {
+            when (def.type) {
+                "boolean" -> obj.put(def.name, v.equals("true", ignoreCase = true))
+                else -> obj.put(def.name, v)
+            }
+        }
+    }
+    return obj.toString()
+}
+
+@Composable
+private fun WorkflowInputField(
+    def: WorkflowInput,
+    value: String,
+    onChange: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val label = def.name + if (def.required) " *" else ""
+        when (def.type) {
+            "choice" -> {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onChange,
+                    label = { Text(label) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (def.description.isNotBlank()) {
+                    Text(def.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (def.options.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        def.options.forEach { opt ->
+                            FilterChip(
+                                selected = value == opt,
+                                onClick = { onChange(opt) },
+                                label = { Text(opt) }
+                            )
+                        }
+                    }
+                }
+            }
+            "boolean" -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = value.equals("true", ignoreCase = true),
+                        onCheckedChange = { onChange(if (it) "true" else "false") }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(label, style = MaterialTheme.typography.labelMedium)
+                        if (def.description.isNotBlank()) {
+                            Text(def.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            else -> {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onChange,
+                    label = { Text(label) },
+                    placeholder = { if (def.description.isNotBlank()) Text(def.description, maxLines = 1) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
