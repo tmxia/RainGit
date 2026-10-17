@@ -75,7 +75,8 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
             val exitCode = process.waitFor()
             
             if (exitCode != 0) {
-                throw RuntimeException("底层 cp 命令执行失败，退出码: $exitCode")
+                val errMsg = process.errorStream.bufferedReader().use { it.readText() }
+                throw RuntimeException("底层 cp 失败: $errMsg")
             }
             
             return dir
