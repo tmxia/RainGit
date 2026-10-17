@@ -49,7 +49,7 @@ class LocalGit(private val token: () -> String?) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
-        // 强制使用 App 的缓存目录作为临时克隆区，避免直接在 U 盘/FUSE 挂载点创建 .git 失败
+        // 强制使用 App 的缓存目录作为临时克隆区
         val temporary = File(System.getProperty("java.io.tmpdir") ?: root.absolutePath, ".rain-clone-${java.util.UUID.randomUUID()}")
         try {
             // 1. 先克隆到本地安全的临时目录
@@ -69,10 +69,32 @@ class LocalGit(private val token: () -> String?) {
             
             // 2. 将克隆好的文件夹，整体移动到你指定的 U 盘目录 (dir)
             if (dir.exists()) dir.deleteRecursively()
+            dir.mkdirs()
             
             if (!temporary.renameTo(dir)) {
-                // 如果 renameTo 失败（跨分区移动），则使用 copyRecursively
-                temporary.copyRecursively(dir, overwrite = true)
+                // 如果 renameTo 失败（跨分区移动），使用深度遍历，逐个文件复制
+                temporary.walkTopDown().forEach { file ->
+                    val relativePath = file.relativeTo(temporary).path
+                    val targetFile = File(dir, relativePath)
+                    if (file.isDirectory) {
+                        targetFile.mkdirs()
+                    } else {
+                        // 强制确保父目录已经创建
+                        targetFile.parentFile?.mkdirs()
+                        // 尝试复制，给 FUSE 系统一点时间
+                        var retry = 0
+                        while (retry < 3) {
+                            try {
+                                file.copyTo(targetFile, overwrite = true)
+                                break
+                            } catch (e: Exception) {
+                                if (retry == 2) throw e
+                                Thread.sleep(50)
+                                retry++
+                            }
+                        }
+                    }
+                }
                 temporary.deleteRecursively()
             }
             
