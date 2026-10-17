@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "me.rain.git"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "me.rain.git"
         minSdk = 30
-        targetSdk = 35
+        targetSdk = 34
         versionCode = System.getenv("RAINGIT_VERSION_CODE")?.toIntOrNull()
             ?: System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
             ?: 1
