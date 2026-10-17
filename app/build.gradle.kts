@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "me.rain.git"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "me.rain.git"
