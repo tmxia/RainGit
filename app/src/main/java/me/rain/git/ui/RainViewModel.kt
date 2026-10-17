@@ -27,7 +27,7 @@ import java.io.IOException
 class RainViewModel(application: Application) : AndroidViewModel(application) {
     val store = SecureStore(application)
     private val client = GitHubClient { store.token() }
-    private val git = LocalGit { store.token() }
+    private val git = LocalGit({ store.token() }, application.cacheDir)
     private var activeJob: Job? = null
     private var downloadJob: Job? = null
     private val actionsMutex = Mutex()
