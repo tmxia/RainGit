@@ -98,11 +98,12 @@ class SecureStore(private val context: Context) {
 
     fun setRootFromTree(uri: Uri): File {
         require(Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) { "请先在系统设置授予所有文件访问权限" }
-        require(uri.authority == "com.android.externalstorage.documents") { "仅支持设备存储目录（请从「系统选择」进入）" }
+        // 放宽校验：允许任何 provider（比如某些系统下的 U 盘、SD 卡 provider）
+        // require(uri.authority == "com.android.externalstorage.documents") { "仅支持设备存储目录（请从「系统选择」进入）" }
 
         val id = DocumentsContract.getTreeDocumentId(uri)
         val colon = id.indexOf(':')
-        require(colon > 0) { "无法识别所选目录" }
+        require(colon > 0) { "无法识别所选目录，请尝试直接输入路径（如 /storage/BA73-022B/RainGit）" }
 
         val volumeId = id.substring(0, colon)
         val relative = id.substring(colon + 1)
