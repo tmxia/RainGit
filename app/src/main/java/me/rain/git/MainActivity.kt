@@ -1,6 +1,8 @@
 package me.rain.git
 
 import android.content.Intent
+import androidx.core.app.ActivityCompat
+import android.Manifest
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +26,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         CrashHandler.install(this)
         enableEdgeToEdge()
+        // 激活系统文件权限列表显示
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
+            1001
+        )
+        
         setContent {
             val model: RainViewModel = viewModel()
 
