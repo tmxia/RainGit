@@ -49,34 +49,84 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
+        // 1. 在 App 内部沙盒极速克隆（不受 FUSE 限制）
+        val temporary = File(cacheDir, ".rain-clone-${java.util.UUID.randomUUID()}")
+        val zipFile = File(cacheDir, ".rain-pack-${java.util.UUID.randomUUID()}.zip")
+        
         try {
-            // 【核心破解】预先在 U 盘上建好 .git 骨架目录，避免 JGit 连环建目录导致 FUSE 报 ENOENT
-            val gitDir = File(dir, ".git")
-            File(gitDir, "refs/heads").mkdirs()
-            File(gitDir, "refs/tags").mkdirs()
-            File(gitDir, "objects/pack").mkdirs()
-            File(gitDir, "objects/info").mkdirs()
-            
-            // 给 Android FUSE 系统 200 毫秒的时间，确保父目录真正落盘
-            Thread.sleep(200)
-            
-            // 临时下载目录逻辑依然需要保留（避开 dist 检查的问题）
-            val oldDist = File(dir, "dist")
-            require(!oldDist.exists()) { "目标目录已包含 dist，请先移动本地下载目录后重试" }
-            
-            // 让 JGit 直接在 U 盘目标目录执行原生克隆
-            Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(dir)
+            Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
-                .setTransportConfigCallback { openGit(dir).close() }
+                .setTransportConfigCallback { openGit(temporary).close() }
                 .call().use { }
             
-            excludeDist(dir)
+            val oldDist = File(dir, "dist")
+            require(!oldDist.exists() || !File(temporary, "dist").exists()) {
+                "远端仓库包含 dist，请先移动本地下载目录后重试"
+            }
+            excludeDist(temporary)
+            val backup = File(root, ".rain-downloads-${java.util.UUID.randomUUID()}")
+            if (oldDist.exists()) oldDist.renameTo(backup)
+            
+            // 2. 打包成 Zip（保留文件的原始修改时间）
+            java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(java.io.FileOutputStream(zipFile))).use { zos ->
+                temporary.walkTopDown().forEach { file ->
+                    if (file != temporary) {
+                        val entryName = file.relativeTo(temporary).invariantSeparatorsPath + (if (file.isDirectory) "/" else "")
+                        val entry = java.util.zip.ZipEntry(entryName)
+                        entry.time = file.lastModified() // 【核心】保留文件原始时间戳
+                        zos.putNextEntry(entry)
+                        if (!file.isDirectory) {
+                            file.inputStream().use { it.copyTo(zos) }
+                        }
+                        zos.closeEntry()
+                    }
+                }
+            }
+            
+            // 3. 准备 U 盘目标目录
+            if (dir.exists()) dir.deleteRecursively()
+            dir.mkdirs()
+            
+            // 4. 解压到 U 盘（严格恢复时间戳）
+            java.util.zip.ZipInputStream(java.io.BufferedInputStream(java.io.FileInputStream(zipFile))).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    val dest = File(dir, entry.name)
+                    if (entry.isDirectory) {
+                        dest.mkdirs()
+                        // 即便是目录，也恢复时间
+                        if (entry.time > 0) dest.setLastModified(entry.time)
+                    } else {
+                        dest.parentFile?.mkdirs()
+                        try {
+                            dest.outputStream().use { zis.copyTo(it) }
+                        } catch (e: Exception) {
+                            Thread.sleep(50)
+                            dest.outputStream().use { zis.copyTo(it) }
+                        }
+                        // 【核心】文件写入后，立刻覆盖为原本的时间戳！
+                        if (entry.time > 0) dest.setLastModified(entry.time)
+                        
+                        // 恢复脚本可执行权限
+                        if (entry.name.endsWith(".sh") || entry.name.endsWith(".py")) {
+                            try { dest.setExecutable(true) } catch (e: Exception) {}
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+            }
+            
+            if (backup.exists()) backup.renameTo(oldDist)
             
             return dir
         } catch (e: Exception) {
-            // 如果克隆失败，清理掉刚建了一半的目录，防止 UI 显示为“已克隆”
-            dir.deleteRecursively()
+            temporary.deleteRecursively()
+            zipFile.delete()
             throw e
+        } finally {
+            temporary.deleteRecursively()
+            zipFile.delete()
         }
     }
 
