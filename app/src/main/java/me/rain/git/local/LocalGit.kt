@@ -49,11 +49,11 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
-        // 【核心】使用 App 的私有 cacheDir 作为绝对安全的临时克隆区
+        // 依然要在内部安全沙盒执行 JGit，否则底层直接报错
         val temporary = File(cacheDir, ".rain-clone-${java.util.UUID.randomUUID()}")
         
         try {
-            // 1. JGit 在内部安全沙盒完成克隆
+            // 1. 沙盒内极速克隆
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
                 .setTransportConfigCallback { openGit(temporary).close() }
@@ -63,36 +63,52 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
             require(!oldDist.exists() || !File(temporary, "dist").exists()) {
                 "远端仓库包含 dist，请先移动本地下载目录后重试"
             }
-            
             excludeDist(temporary)
             val backup = File(root, ".rain-downloads-${java.util.UUID.randomUUID()}")
             if (oldDist.exists()) oldDist.renameTo(backup)
             
-            // 2. 准备目标目录
             if (dir.exists()) dir.deleteRecursively()
             dir.mkdirs()
             
-            // 3. 尝试直接 rename
-            if (!temporary.renameTo(dir)) {
-                // 跨分区移动：借助底层 Linux cp 命令直接穿透 FUSE
-                val tmpPath = temporary.absolutePath
-                val dstPath = dir.absolutePath
+            // 2. 核心：遍历复制，严格对齐文件时间，并做 FUSE 避让
+            temporary.walkTopDown().forEach { src ->
+                if (src == temporary) return@forEach
+                val relative = src.relativeTo(temporary).path
+                val dest = File(dir, relative)
                 
-                // 先用 Java 建好目标目录，防止有些系统不建隐藏目录
-                File(dir, ".git/refs/heads").mkdirs()
-                File(dir, ".git/objects").mkdirs()
-                File(dir, ".git/refs/tags").mkdirs()
-                
-                try {
-                    val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "cp -r -p \"$tmpPath/.\" \"$dstPath/\""))
-                    process.waitFor()
-                } catch (e: Exception) {
-                    // 兜底：Java copyRecursively
-                    temporary.copyRecursively(dir, overwrite = true)
+                if (src.isDirectory) {
+                    if (!dest.exists()) {
+                        dest.mkdirs()
+                    }
+                } else {
+                    // 【绝杀1】确保父目录绝对存在
+                    val parent = dest.parentFile
+                    if (parent != null && !parent.exists()) {
+                        parent.mkdirs()
+                        // 给 Android 的 FUSE 系统一点点响应时间
+                        var wait = 0
+                        while (!parent.exists() && wait < 5) {
+                            Thread.sleep(50)
+                            wait++
+                        }
+                    }
+                    
+                    // 【绝杀2】复制文件
+                    if (!dest.exists() || dest.length() != src.length()) {
+                        src.copyTo(dest, overwrite = true)
+                    }
+                    
+                    // 【绝杀3】无缝继承时间戳（保证 Termux 里 git status 干净）
+                    dest.setLastModified(src.lastModified())
+                    
+                    // 【绝杀4】保留脚本的可执行权限
+                    if (src.canExecute()) {
+                        dest.setExecutable(true)
+                    }
                 }
-                temporary.deleteRecursively()
             }
             
+            temporary.deleteRecursively()
             if (backup.exists()) backup.renameTo(oldDist)
             
             return dir
