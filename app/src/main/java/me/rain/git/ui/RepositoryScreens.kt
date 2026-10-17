@@ -40,7 +40,7 @@ internal fun RemoteScreen(
     val localNames = remember(vm.localDirs) { vm.localDirs.map { it.name }.toSet() }
     val filtered = remember(vm.repos, vm.favoriteRepos, localNames, search, filter) {
         vm.repos.filter { repo ->
-            val present = "${repo.owner}--${repo.name}" in localNames
+            val present = "${repo.name}" in localNames
             (repo.fullName.contains(search, true) || repo.description.contains(search, true)) && when (filter) {
                 1 -> repo.fullName in vm.favoriteRepos
                 2 -> present
