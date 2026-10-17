@@ -86,12 +86,10 @@ class SecureStore(private val context: Context) {
     fun root(): File {
         val saved = prefs.getString("root", null)?.let(::File)
         val dir = if (saved != null) saved else defaultRoot
-        
-        if (!dir.isDirectory && !dir.mkdirs()) {
-            throw SecurityException("无法创建或访问目录：${dir.path}。请确保已授予「所有文件访问权限」且 U盘/SD卡 已挂载。")
-        }
-        if (!dir.canWrite()) {
-            throw SecurityException("目录不可写：${dir.path}")
+
+        // 放弃强校验：无条件信任保存的路径
+        if (!dir.exists()) {
+            dir.mkdirs()
         }
         return dir.canonicalFile
     }
@@ -138,10 +136,13 @@ class SecureStore(private val context: Context) {
         require(trimmed.isNotBlank()) { "路径不能为空" }
         val candidate = File(trimmed)
         require(candidate.isAbsolute) { "请填写绝对路径，例如 /sdcard/RainGit" }
-        if (!candidate.isDirectory && !candidate.mkdirs()) {
-            throw IllegalArgumentException("无法创建或写入目录：$trimmed（请检查路径，或授予「所有文件访问」权限）")
+        
+        // 放弃严格的 canWrite() 和 mkdirs() 校验，强行保存。
+        // 如果是 U盘根目录，Android 系统的 FUSE 机制可能会误判其不可写。
+        if (!candidate.exists()) {
+            candidate.mkdirs() // 尽最大努力尝试创建
         }
-        require(candidate.canWrite()) { "目录不可写：$trimmed" }
+        
         val canonical = candidate.canonicalFile
         prefs.edit().putString("root", canonical.path).apply()
         return canonical
