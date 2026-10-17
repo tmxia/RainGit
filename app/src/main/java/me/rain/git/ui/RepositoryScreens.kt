@@ -209,7 +209,7 @@ internal fun LocalScreen(vm: RainViewModel) {
 @Composable
 internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () -> Unit, openUrl: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val context = context
+val context = context
 
     var author by rememberSaveable(vm.account?.login) { mutableStateOf(vm.store.author) }
     var email by rememberSaveable(vm.account?.login) { mutableStateOf(vm.store.email) }
