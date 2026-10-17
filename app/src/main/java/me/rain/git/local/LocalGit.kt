@@ -49,7 +49,6 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
-        // 1. 在 App 内部沙盒极速克隆（不受 FUSE 限制）
         val temporary = File(cacheDir, ".rain-clone-${java.util.UUID.randomUUID()}")
         val zipFile = File(cacheDir, ".rain-pack-${java.util.UUID.randomUUID()}.zip")
         
@@ -67,34 +66,34 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
             val backup = File(root, ".rain-downloads-${java.util.UUID.randomUUID()}")
             if (oldDist.exists()) oldDist.renameTo(backup)
             
-            // 2. 打包成 Zip（保留文件的原始修改时间）
+            // 打包 Zip
             java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(java.io.FileOutputStream(zipFile))).use { zos ->
                 temporary.walkTopDown().forEach { file ->
                     if (file != temporary) {
                         val entryName = file.relativeTo(temporary).invariantSeparatorsPath + (if (file.isDirectory) "/" else "")
                         val entry = java.util.zip.ZipEntry(entryName)
-                        entry.time = file.lastModified() // 【核心】保留文件原始时间戳
+                        entry.time = file.lastModified()
                         zos.putNextEntry(entry)
-                        if (!file.isDirectory) {
-                            file.inputStream().use { it.copyTo(zos) }
-                        }
+                        if (!file.isDirectory) file.inputStream().use { it.copyTo(zos) }
                         zos.closeEntry()
                     }
                 }
             }
             
-            // 3. 准备 U 盘目标目录
             if (dir.exists()) dir.deleteRecursively()
             dir.mkdirs()
             
-            // 4. 解压到 U 盘（严格恢复时间戳）
+            // 【核弹级破解】通过底层 Linux 命令强制预建隐藏目录，无视 Android FUSE 限制
+            val mkdirCmd = arrayOf("sh", "-c", "mkdir -p \"${dir.absolutePath}/.git/refs/heads\" \"${dir.absolutePath}/.git/refs/tags\" \"${dir.absolutePath}/.git/objects/pack\" \"${dir.absolutePath}/.git/objects/info\"")
+            Runtime.getRuntime().exec(mkdirCmd).waitFor()
+            
+            // 解压到 U 盘
             java.util.zip.ZipInputStream(java.io.BufferedInputStream(java.io.FileInputStream(zipFile))).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
                     val dest = File(dir, entry.name)
                     if (entry.isDirectory) {
                         dest.mkdirs()
-                        // 即便是目录，也恢复时间
                         if (entry.time > 0) dest.setLastModified(entry.time)
                     } else {
                         dest.parentFile?.mkdirs()
@@ -104,10 +103,7 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
                             Thread.sleep(50)
                             dest.outputStream().use { zis.copyTo(it) }
                         }
-                        // 【核心】文件写入后，立刻覆盖为原本的时间戳！
                         if (entry.time > 0) dest.setLastModified(entry.time)
-                        
-                        // 恢复脚本可执行权限
                         if (entry.name.endsWith(".sh") || entry.name.endsWith(".py")) {
                             try { dest.setExecutable(true) } catch (e: Exception) {}
                         }
@@ -118,7 +114,6 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
             }
             
             if (backup.exists()) backup.renameTo(oldDist)
-            
             return dir
         } catch (e: Exception) {
             temporary.deleteRecursively()
