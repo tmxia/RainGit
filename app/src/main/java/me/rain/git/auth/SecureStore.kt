@@ -87,7 +87,7 @@ class SecureStore(private val context: Context) {
         val saved = prefs.getString("root", null)?.let(::File)
         val dir = if (saved != null) saved else defaultRoot
 
-        // 放弃强校验：无条件信任保存的路径
+        
         if (!dir.exists()) {
             dir.mkdirs()
         }
@@ -95,9 +95,9 @@ class SecureStore(private val context: Context) {
     }
 
     fun setRootFromTree(uri: Uri): File {
-        require(Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) { "请先在系统设置授予所有文件访问权限" }
-        // 放宽校验：允许任何 provider（比如某些系统下的 U 盘、SD 卡 provider）
-        // require(uri.authority == "com.android.externalstorage.documents") { "仅支持设备存储目录（请从「系统选择」进入）" }
+        
+        
+        
 
         val id = DocumentsContract.getTreeDocumentId(uri)
         val colon = id.indexOf(':')
@@ -137,10 +137,10 @@ class SecureStore(private val context: Context) {
         val candidate = File(trimmed)
         require(candidate.isAbsolute) { "请填写绝对路径，例如 /sdcard/RainGit" }
         
-        // 放弃严格的 canWrite() 和 mkdirs() 校验，强行保存。
-        // 如果是 U盘根目录，Android 系统的 FUSE 机制可能会误判其不可写。
+        
+        
         if (!candidate.exists()) {
-            candidate.mkdirs() // 尽最大努力尝试创建
+            candidate.mkdirs() 
         }
         
         val canonical = candidate.canonicalFile

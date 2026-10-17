@@ -39,7 +39,7 @@ class LocalGit(private val token: () -> String?) {
 
     fun directory(root: File, repo: RemoteRepo): File {
         require(Regex("[A-Za-z0-9_.-]+").matches(repo.owner) && Regex("[A-Za-z0-9_.-]+").matches(repo.name))
-        return File(root, "${repo.owner}--${repo.name}")
+        return File(root, "${repo.name}")
     }
 
     fun isRepo(dir: File) = dir.isDirectory && File(dir, ".git").exists()

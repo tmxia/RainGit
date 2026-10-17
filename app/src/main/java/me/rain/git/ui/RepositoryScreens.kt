@@ -46,7 +46,7 @@ internal fun RemoteScreen(
                 3 -> repo.privateRepo
                 else -> true
             }
-        }.sortedWith(compareByDescending<RemoteRepo> { it.fullName in vm.favoriteRepos }.thenByDescending { "${it.owner}--${it.name}" in localNames }.thenByDescending { it.updatedAt })
+        }.sortedWith(compareByDescending<RemoteRepo> { it.fullName in vm.favoriteRepos }.thenByDescending { "${it.name}" in localNames }.thenByDescending { it.updatedAt })
     }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
@@ -337,11 +337,9 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
             },
             confirmButton = {
                 TextButton(onClick = {
-                    showPathDialog = false
-                    // 拦截：如果是 Android 11+，且未授予全盘权限，唤起授权
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
                         grant()
-                        android.widget.Toast.makeText(context, "请先授予「所有文件访问权限」，然后重新输入路径", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "请先授予「所有文件访问权限」，然后重新输入路径", android.widget.Toast.LENGTH_LONG).show()
                     } else {
                         vm.setRootPath(pathInput)
                     }

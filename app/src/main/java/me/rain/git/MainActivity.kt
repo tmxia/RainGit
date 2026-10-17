@@ -26,12 +26,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         CrashHandler.install(this)
         enableEdgeToEdge()
-        // 激活系统文件权限列表显示
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
-            1001
-        )
         
         setContent {
             val model: RainViewModel = viewModel()
@@ -62,14 +56,14 @@ class MainActivity : ComponentActivity() {
                 onGrantStorage = {
                     try {
                         val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            // 尝试打开系统全局的特殊权限页面
+                            
                             Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
                         } else {
                             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
                         }
                         startActivity(intent)
                     } catch (e: Exception) {
-                        // 如果全局页面也被拦截，只能退回到应用详情页
+                        
                         try {
                             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
                             android.widget.Toast.makeText(this@MainActivity, "请在「其他权限」中寻找「所有文件访问」", android.widget.Toast.LENGTH_LONG).show()
