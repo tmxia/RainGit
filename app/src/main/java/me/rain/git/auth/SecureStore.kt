@@ -88,8 +88,10 @@ class SecureStore(private val context: Context) {
         val dir = if (saved != null) saved else defaultRoot
         
         if (!dir.isDirectory && !dir.mkdirs()) {
-            require(defaultRoot.isDirectory || defaultRoot.mkdirs()) { "无法建立仓库目录" }
-            return defaultRoot.canonicalFile
+            throw SecurityException("无法创建或访问目录：${dir.path}。请确保已授予「所有文件访问权限」且 U盘/SD卡 已挂载。")
+        }
+        if (!dir.canWrite()) {
+            throw SecurityException("目录不可写：${dir.path}")
         }
         return dir.canonicalFile
     }
