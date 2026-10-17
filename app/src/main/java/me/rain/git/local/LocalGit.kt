@@ -49,7 +49,7 @@ class LocalGit(private val token: () -> String?) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
-        // 强制使用 App 的缓存目录作为临时克隆区
+        // 强制使用 App 的缓存目录作为临时克隆区，避免直接在 U 盘/FUSE 挂载点创建 .git 失败
         val temporary = File(System.getProperty("java.io.tmpdir") ?: root.absolutePath, ".rain-clone-${java.util.UUID.randomUUID()}")
         try {
             // 1. 先克隆到本地安全的临时目录
@@ -71,27 +71,32 @@ class LocalGit(private val token: () -> String?) {
             if (dir.exists()) dir.deleteRecursively()
             dir.mkdirs()
             
+            // 尝试直接 rename
             if (!temporary.renameTo(dir)) {
-                // 如果 renameTo 失败（跨分区移动），使用深度遍历，逐个文件复制
-                temporary.walkTopDown().forEach { file ->
-                    val relativePath = file.relativeTo(temporary).path
-                    val targetFile = File(dir, relativePath)
-                    if (file.isDirectory) {
-                        targetFile.mkdirs()
-                    } else {
-                        // 强制确保父目录已经创建
-                        targetFile.parentFile?.mkdirs()
-                        // 尝试复制，给 FUSE 系统一点时间
-                        var retry = 0
-                        while (retry < 3) {
-                            try {
-                                file.copyTo(targetFile, overwrite = true)
-                                break
-                            } catch (e: Exception) {
-                                if (retry == 2) throw e
-                                Thread.sleep(50)
-                                retry++
-                            }
+                // 【核心突破】如果跨分区，不依赖 Java 的 copy，直接执行 Linux 原生 cp 命令
+                // 这在 Android 中通常会调用底层的 toybox/cp，能完美绕过 FUSE 的 Java 限制
+                try {
+                    val command = arrayOf("cp", "-r", "-p", "$temporary/.", dir.absolutePath)
+                    val process = Runtime.getRuntime().exec(command)
+                    process.waitFor()
+                    if (process.exitValue() != 0) {
+                        // 如果 cp 失败，尝试用 sh -c 包裹（某些 Android 系统的 PATH 问题）
+                        val shCommand = arrayOf("sh", "-c", "cp -r -p \"$temporary/.\" \"${dir.absolutePath}\"")
+                        val shProcess = Runtime.getRuntime().exec(shCommand)
+                        shProcess.waitFor()
+                        if (shProcess.exitValue() != 0) {
+                            throw RuntimeException("底层 cp 命令执行失败: ${shProcess.exitValue()}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    // 如果底层命令失败，最后兜底才用 Java 遍历复制
+                    temporary.walkTopDown().forEach { file ->
+                        val targetFile = File(dir, file.relativeTo(temporary).path)
+                        if (file.isDirectory) {
+                            targetFile.mkdirs()
+                        } else {
+                            targetFile.parentFile?.mkdirs()
+                            file.copyTo(targetFile, overwrite = true)
                         }
                     }
                 }
