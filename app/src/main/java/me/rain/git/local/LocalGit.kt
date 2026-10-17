@@ -12,7 +12,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 
-class LocalGit(private val token: () -> String?) {
+class LocalGit(private val token: () -> String?, private val cacheDir: File) {
     private fun auth(): CredentialsProvider = UsernamePasswordCredentialsProvider(
         "x-access-token", token() ?: throw IOException("GitHub 登录已失效")
     )
@@ -49,10 +49,11 @@ class LocalGit(private val token: () -> String?) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
-        // 强制使用 App 的缓存目录作为临时克隆区，避免直接在 U 盘/FUSE 挂载点创建 .git 失败
-        val temporary = File(System.getProperty("java.io.tmpdir") ?: root.absolutePath, ".rain-clone-${java.util.UUID.randomUUID()}")
+        // 【核心】使用 App 的私有 cacheDir 作为绝对安全的临时克隆区
+        val temporary = File(cacheDir, ".rain-clone-${java.util.UUID.randomUUID()}")
+        
         try {
-            // 1. 先克隆到本地安全的临时目录
+            // 1. JGit 在内部安全沙盒完成克隆
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
                 .setTransportConfigCallback { openGit(temporary).close() }
@@ -67,38 +68,27 @@ class LocalGit(private val token: () -> String?) {
             val backup = File(root, ".rain-downloads-${java.util.UUID.randomUUID()}")
             if (oldDist.exists()) oldDist.renameTo(backup)
             
-            // 2. 将克隆好的文件夹，整体移动到你指定的 U 盘目录 (dir)
+            // 2. 准备目标目录
             if (dir.exists()) dir.deleteRecursively()
             dir.mkdirs()
             
-            // 尝试直接 rename
+            // 3. 尝试直接 rename
             if (!temporary.renameTo(dir)) {
-                // 【核心突破】如果跨分区，不依赖 Java 的 copy，直接执行 Linux 原生 cp 命令
-                // 这在 Android 中通常会调用底层的 toybox/cp，能完美绕过 FUSE 的 Java 限制
+                // 跨分区移动：借助底层 Linux cp 命令直接穿透 FUSE
+                val tmpPath = temporary.absolutePath
+                val dstPath = dir.absolutePath
+                
+                // 先用 Java 建好目标目录，防止有些系统不建隐藏目录
+                File(dir, ".git/refs/heads").mkdirs()
+                File(dir, ".git/objects").mkdirs()
+                File(dir, ".git/refs/tags").mkdirs()
+                
                 try {
-                    val command = arrayOf("cp", "-r", "-p", "$temporary/.", dir.absolutePath)
-                    val process = Runtime.getRuntime().exec(command)
+                    val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "cp -r -p \"$tmpPath/.\" \"$dstPath/\""))
                     process.waitFor()
-                    if (process.exitValue() != 0) {
-                        // 如果 cp 失败，尝试用 sh -c 包裹（某些 Android 系统的 PATH 问题）
-                        val shCommand = arrayOf("sh", "-c", "cp -r -p \"$temporary/.\" \"${dir.absolutePath}\"")
-                        val shProcess = Runtime.getRuntime().exec(shCommand)
-                        shProcess.waitFor()
-                        if (shProcess.exitValue() != 0) {
-                            throw RuntimeException("底层 cp 命令执行失败: ${shProcess.exitValue()}")
-                        }
-                    }
                 } catch (e: Exception) {
-                    // 如果底层命令失败，最后兜底才用 Java 遍历复制
-                    temporary.walkTopDown().forEach { file ->
-                        val targetFile = File(dir, file.relativeTo(temporary).path)
-                        if (file.isDirectory) {
-                            targetFile.mkdirs()
-                        } else {
-                            targetFile.parentFile?.mkdirs()
-                            file.copyTo(targetFile, overwrite = true)
-                        }
-                    }
+                    // 兜底：Java copyRecursively
+                    temporary.copyRecursively(dir, overwrite = true)
                 }
                 temporary.deleteRecursively()
             }
