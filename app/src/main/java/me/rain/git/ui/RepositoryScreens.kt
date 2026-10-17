@@ -4,47 +4,26 @@ package me.rain.git.ui
 
 import android.os.Environment
 import androidx.compose.foundation.clickable
-import android.os.Environment
 import androidx.compose.animation.*
-import android.os.Environment
 import androidx.compose.animation.animateContentSize
-import android.os.Environment
 import androidx.compose.animation.core.tween
-import android.os.Environment
 import androidx.compose.foundation.horizontalScroll
-import android.os.Environment
 import androidx.compose.foundation.layout.*
-import android.os.Environment
 import androidx.compose.foundation.lazy.LazyColumn
-import android.os.Environment
 import androidx.compose.foundation.lazy.items
-import android.os.Environment
 import androidx.compose.foundation.rememberScrollState
-import android.os.Environment
 import androidx.compose.foundation.shape.RoundedCornerShape
-import android.os.Environment
 import androidx.compose.foundation.verticalScroll
-import android.os.Environment
 import androidx.compose.material.icons.Icons
-import android.os.Environment
 import androidx.compose.material.icons.rounded.*
-import android.os.Environment
 import androidx.compose.material3.*
-import android.os.Environment
 import androidx.compose.runtime.*
-import android.os.Environment
 import androidx.compose.runtime.saveable.rememberSaveable
-import android.os.Environment
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import android.os.Environment
 import androidx.compose.ui.Alignment
-import android.os.Environment
 import androidx.compose.ui.Modifier
-import android.os.Environment
 import androidx.compose.ui.text.font.FontWeight
-import android.os.Environment
 import androidx.compose.ui.text.style.TextOverflow
-import android.os.Environment
 import androidx.compose.ui.unit.dp
 import me.rain.git.github.RemoteRepo
 
@@ -228,6 +207,8 @@ internal fun LocalScreen(vm: RainViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () -> Unit, openUrl: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     var author by rememberSaveable(vm.account?.login) { mutableStateOf(vm.store.author) }
     var email by rememberSaveable(vm.account?.login) { mutableStateOf(vm.store.email) }
     var confirmLogout by remember { mutableStateOf(false) }
@@ -360,7 +341,7 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
                     // 拦截：如果是 Android 11+，且未授予全盘权限，唤起授权
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
                         grant()
-                        android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "请先授予「所有文件访问权限」，然后重新输入路径", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, "请先授予「所有文件访问权限」，然后重新输入路径", android.widget.Toast.LENGTH_LONG).show()
                     } else {
                         vm.setRootPath(pathInput)
                     }
