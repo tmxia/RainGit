@@ -49,11 +49,10 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
-        // 1. 强制使用 App 内部绝对安全的缓存沙盒进行克隆
         val temporary = File(cacheDir, ".rain-clone-${java.util.UUID.randomUUID()}")
         
         try {
-            // JGit 在安全区肆意建立 .git 目录，绝不报错
+            // 1. 沙盒克隆
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
                 .setTransportConfigCallback { openGit(temporary).close() }
@@ -65,12 +64,19 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
             }
             excludeDist(temporary)
             
-            // 2. 清理旧目录
+            // 2. 暴力清理并强制建立目标目录
             if (dir.exists()) dir.deleteRecursively()
-            dir.mkdirs()
+            val targetDirPath = dir.absolutePath
+            val mkdirCmd = "mkdir -p \"$targetDirPath\""
+            val mkProcess = Runtime.getRuntime().exec(arrayOf("sh", "-c", mkdirCmd))
+            val mkExit = mkProcess.waitFor()
+            if (mkExit != 0) {
+                val mkErr = mkProcess.errorStream.bufferedReader().use { it.readText() }
+                throw RuntimeException("创建目标目录失败(可能无权限): $mkErr")
+            }
             
-            // 3. 【核弹级写盘】直接调用 Linux 原生 cp 命令，强穿 FUSE 限制
-            val cmd = "cp -r -p -f \"${temporary.absolutePath}/.\" \"${dir.absolutePath}/\""
+            // 3. 底层 cp 搬运
+            val cmd = "cp -r -p -f \"${temporary.absolutePath}/.\" \"$targetDirPath/\""
             val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
             val exitCode = process.waitFor()
             
