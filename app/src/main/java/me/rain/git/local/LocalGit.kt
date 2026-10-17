@@ -49,10 +49,11 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
+        // 1. 强制使用 App 内部绝对安全的缓存沙盒进行克隆
         val temporary = File(cacheDir, ".rain-clone-${java.util.UUID.randomUUID()}")
-        val zipFile = File(cacheDir, ".rain-pack-${java.util.UUID.randomUUID()}.zip")
         
         try {
+            // JGit 在安全区肆意建立 .git 目录，绝不报错
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
                 .setTransportConfigCallback { openGit(temporary).close() }
@@ -63,70 +64,25 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
                 "远端仓库包含 dist，请先移动本地下载目录后重试"
             }
             excludeDist(temporary)
-            val backup = File(root, ".rain-downloads-${java.util.UUID.randomUUID()}")
-            if (oldDist.exists()) oldDist.renameTo(backup)
             
-            // 1. 打包 Zip
-            java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(java.io.FileOutputStream(zipFile))).use { zos ->
-                temporary.walkTopDown().forEach { file ->
-                    if (file != temporary) {
-                        val entryName = file.relativeTo(temporary).invariantSeparatorsPath + (if (file.isDirectory) "/" else "")
-                        val entry = java.util.zip.ZipEntry(entryName)
-                        entry.time = file.lastModified()
-                        zos.putNextEntry(entry)
-                        if (!file.isDirectory) file.inputStream().use { it.copyTo(zos) }
-                        zos.closeEntry()
-                    }
-                }
-            }
-            
-            // 2. 彻底删除旧目录
-            if (dir.exists()) {
-                dir.deleteRecursively()
-                Thread.sleep(100) // 给 FUSE 一点时间清除
-            }
+            // 2. 清理旧目录
+            if (dir.exists()) dir.deleteRecursively()
             dir.mkdirs()
             
-            // 3. 解压（增加父目录绝对强建保障）
-            java.util.zip.ZipInputStream(java.io.BufferedInputStream(java.io.FileInputStream(zipFile))).use { zis ->
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    val dest = File(dir, entry.name)
-                    
-                    // 【核心修复】无论是不是文件夹，都先把绝对父目录建出来
-                    dest.parentFile?.mkdirs()
-                    
-                    if (entry.isDirectory) {
-                        dest.mkdirs()
-                        if (entry.time > 0) dest.setLastModified(entry.time)
-                    } else {
-                        try {
-                            dest.outputStream().use { zis.copyTo(it) }
-                        } catch (e: Exception) {
-                            // 如果写入失败（说明父目录建得太慢），等待后重试
-                            Thread.sleep(50)
-                            dest.parentFile?.mkdirs()
-                            dest.outputStream().use { zis.copyTo(it) }
-                        }
-                        if (entry.time > 0) dest.setLastModified(entry.time)
-                        if (entry.name.endsWith(".sh") || entry.name.endsWith(".py")) {
-                            try { dest.setExecutable(true) } catch (e: Exception) {}
-                        }
-                    }
-                    zis.closeEntry()
-                    entry = zis.nextEntry
-                }
+            // 3. 【核弹级写盘】直接调用 Linux 原生 cp 命令，强穿 FUSE 限制
+            val cmd = "cp -r -p -f \"${temporary.absolutePath}/.\" \"${dir.absolutePath}/\""
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+            val exitCode = process.waitFor()
+            
+            if (exitCode != 0) {
+                throw RuntimeException("底层 cp 命令执行失败，退出码: $exitCode")
             }
             
-            if (backup.exists()) backup.renameTo(oldDist)
             return dir
         } catch (e: Exception) {
-            temporary.deleteRecursively()
-            zipFile.delete()
             throw e
         } finally {
             temporary.deleteRecursively()
-            zipFile.delete()
         }
     }
 
