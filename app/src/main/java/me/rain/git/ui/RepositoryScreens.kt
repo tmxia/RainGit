@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.rain.git.github.RemoteRepo
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 internal fun RemoteScreen(
@@ -208,6 +209,7 @@ internal fun LocalScreen(vm: RainViewModel) {
 @Composable
 internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () -> Unit, openUrl: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val context = context
 
     var author by rememberSaveable(vm.account?.login) { mutableStateOf(vm.store.author) }
     var email by rememberSaveable(vm.account?.login) { mutableStateOf(vm.store.email) }
@@ -339,7 +341,7 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
                 TextButton(onClick = {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
                         grant()
-                        android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "请先授予「所有文件访问权限」，然后重新输入路径", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, "请先授予「所有文件访问权限」，然后重新输入路径", android.widget.Toast.LENGTH_LONG).show()
                     } else {
                         vm.setRootPath(pathInput)
                     }
