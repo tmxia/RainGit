@@ -208,7 +208,9 @@ internal fun LocalScreen(vm: RainViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () -> Unit, openUrl: (String) -> Unit) {
+    // 统一注入的 Context 声明
     val context = androidx.compose.ui.platform.LocalContext.current
+
 val context = context
 
     var author by rememberSaveable(vm.account?.login) { mutableStateOf(vm.store.author) }
