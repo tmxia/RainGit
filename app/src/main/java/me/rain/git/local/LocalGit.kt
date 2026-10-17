@@ -66,7 +66,7 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
             val backup = File(root, ".rain-downloads-${java.util.UUID.randomUUID()}")
             if (oldDist.exists()) oldDist.renameTo(backup)
             
-            // 打包 Zip
+            // 1. 打包 Zip
             java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(java.io.FileOutputStream(zipFile))).use { zos ->
                 temporary.walkTopDown().forEach { file ->
                     if (file != temporary) {
@@ -80,27 +80,32 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
                 }
             }
             
-            if (dir.exists()) dir.deleteRecursively()
+            // 2. 彻底删除旧目录
+            if (dir.exists()) {
+                dir.deleteRecursively()
+                Thread.sleep(100) // 给 FUSE 一点时间清除
+            }
             dir.mkdirs()
             
-            // 【核弹级破解】通过底层 Linux 命令强制预建隐藏目录，无视 Android FUSE 限制
-            val mkdirCmd = arrayOf("sh", "-c", "mkdir -p \"${dir.absolutePath}/.git/refs/heads\" \"${dir.absolutePath}/.git/refs/tags\" \"${dir.absolutePath}/.git/objects/pack\" \"${dir.absolutePath}/.git/objects/info\"")
-            Runtime.getRuntime().exec(mkdirCmd).waitFor()
-            
-            // 解压到 U 盘
+            // 3. 解压（增加父目录绝对强建保障）
             java.util.zip.ZipInputStream(java.io.BufferedInputStream(java.io.FileInputStream(zipFile))).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
                     val dest = File(dir, entry.name)
+                    
+                    // 【核心修复】无论是不是文件夹，都先把绝对父目录建出来
+                    dest.parentFile?.mkdirs()
+                    
                     if (entry.isDirectory) {
                         dest.mkdirs()
                         if (entry.time > 0) dest.setLastModified(entry.time)
                     } else {
-                        dest.parentFile?.mkdirs()
                         try {
                             dest.outputStream().use { zis.copyTo(it) }
                         } catch (e: Exception) {
+                            // 如果写入失败（说明父目录建得太慢），等待后重试
                             Thread.sleep(50)
+                            dest.parentFile?.mkdirs()
                             dest.outputStream().use { zis.copyTo(it) }
                         }
                         if (entry.time > 0) dest.setLastModified(entry.time)
