@@ -48,34 +48,41 @@ class LocalGit(private val token: () -> String?) {
         val dir = directory(root, repo)
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
-        val temporary = File(root, ".rain-clone-${java.util.UUID.randomUUID()}")
+        
+        // 强制使用 App 的缓存目录作为临时克隆区，避免直接在 U 盘/FUSE 挂载点创建 .git 失败
+        val temporary = File(System.getProperty("java.io.tmpdir") ?: root.absolutePath, ".rain-clone-${java.util.UUID.randomUUID()}")
         try {
+            // 1. 先克隆到本地安全的临时目录
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
-                
-                
-                
                 .setTransportConfigCallback { openGit(temporary).close() }
                 .call().use { }
+            
             val oldDist = File(dir, "dist")
             require(!oldDist.exists() || !File(temporary, "dist").exists()) {
                 "远端仓库包含 dist，请先移动本地下载目录后重试"
             }
+            
             excludeDist(temporary)
             val backup = File(root, ".rain-downloads-${java.util.UUID.randomUUID()}")
-            val hadDirectory = dir.exists()
-            if (hadDirectory) require(dir.renameTo(backup)) { "无法保留已有下载目录" }
+            if (oldDist.exists()) oldDist.renameTo(backup)
+            
+            // 2. 将克隆好的文件夹，整体移动到你指定的 U 盘目录 (dir)
+            if (dir.exists()) dir.deleteRecursively()
+            
             if (!temporary.renameTo(dir)) {
-                if (hadDirectory && !backup.renameTo(dir)) throw IOException("克隆未完成，原下载文件保留在 ${backup.path}")
-                throw IOException("无法完成仓库克隆")
+                // 如果 renameTo 失败（跨分区移动），则使用 copyRecursively
+                temporary.copyRecursively(dir, overwrite = true)
+                temporary.deleteRecursively()
             }
-            val preservedDist = File(backup, "dist")
-            if (preservedDist.exists() && !preservedDist.renameTo(File(dir, "dist"))) {
-                throw IOException("仓库已克隆，原下载文件保留在 ${preservedDist.path}，请手动移入 dist")
-            }
-            if (hadDirectory) backup.delete()
+            
+            if (backup.exists()) backup.renameTo(oldDist)
+            
             return dir
-        } finally { temporary.deleteRecursively() }
+        } catch (e: Exception) {
+            temporary.deleteRecursively()
+            throw e
+        }
     }
 
     data class Snapshot(
