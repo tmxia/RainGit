@@ -50,7 +50,17 @@ class MainActivity : ComponentActivity() {
                 model = model,
                 hasStoragePermission = hasStoragePermission,
                 onChooseDirectory = { picker.launch(null) },
-                onGrantStorage = { openStorageSettings(grantStorage) },
+                onGrantStorage = {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+                        } else {
+                            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                        }
+                    } catch (e: Exception) {
+                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                    }
+                },
                 onOpenUrl = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             )
         }
