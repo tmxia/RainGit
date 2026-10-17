@@ -61,13 +61,19 @@ class MainActivity : ComponentActivity() {
                 onChooseDirectory = { picker.launch(null) },
                 onGrantStorage = {
                     try {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+                        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            // 尝试打开系统全局的特殊权限页面
+                            Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
                         } else {
-                            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
                         }
+                        startActivity(intent)
                     } catch (e: Exception) {
-                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                        // 如果全局页面也被拦截，只能退回到应用详情页
+                        try {
+                            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                            android.widget.Toast.makeText(this@MainActivity, "请在「其他权限」中寻找「所有文件访问」", android.widget.Toast.LENGTH_LONG).show()
+                        } catch (e2: Exception) {}
                     }
                 },
                 onOpenUrl = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
