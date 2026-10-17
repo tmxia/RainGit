@@ -49,71 +49,33 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         
-        // 依然要在内部安全沙盒执行 JGit，否则底层直接报错
-        val temporary = File(cacheDir, ".rain-clone-${java.util.UUID.randomUUID()}")
-        
         try {
-            // 1. 沙盒内极速克隆
-            Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
+            // 【核心破解】预先在 U 盘上建好 .git 骨架目录，避免 JGit 连环建目录导致 FUSE 报 ENOENT
+            val gitDir = File(dir, ".git")
+            File(gitDir, "refs/heads").mkdirs()
+            File(gitDir, "refs/tags").mkdirs()
+            File(gitDir, "objects/pack").mkdirs()
+            File(gitDir, "objects/info").mkdirs()
+            
+            // 给 Android FUSE 系统 200 毫秒的时间，确保父目录真正落盘
+            Thread.sleep(200)
+            
+            // 临时下载目录逻辑依然需要保留（避开 dist 检查的问题）
+            val oldDist = File(dir, "dist")
+            require(!oldDist.exists()) { "目标目录已包含 dist，请先移动本地下载目录后重试" }
+            
+            // 让 JGit 直接在 U 盘目标目录执行原生克隆
+            Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(dir)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
-                .setTransportConfigCallback { openGit(temporary).close() }
+                .setTransportConfigCallback { openGit(dir).close() }
                 .call().use { }
             
-            val oldDist = File(dir, "dist")
-            require(!oldDist.exists() || !File(temporary, "dist").exists()) {
-                "远端仓库包含 dist，请先移动本地下载目录后重试"
-            }
-            excludeDist(temporary)
-            val backup = File(root, ".rain-downloads-${java.util.UUID.randomUUID()}")
-            if (oldDist.exists()) oldDist.renameTo(backup)
-            
-            if (dir.exists()) dir.deleteRecursively()
-            dir.mkdirs()
-            
-            // 2. 核心：遍历复制，严格对齐文件时间，并做 FUSE 避让
-            temporary.walkTopDown().forEach { src ->
-                if (src == temporary) return@forEach
-                val relative = src.relativeTo(temporary).path
-                val dest = File(dir, relative)
-                
-                if (src.isDirectory) {
-                    if (!dest.exists()) {
-                        dest.mkdirs()
-                    }
-                } else {
-                    // 【绝杀1】确保父目录绝对存在
-                    val parent = dest.parentFile
-                    if (parent != null && !parent.exists()) {
-                        parent.mkdirs()
-                        // 给 Android 的 FUSE 系统一点点响应时间
-                        var wait = 0
-                        while (!parent.exists() && wait < 5) {
-                            Thread.sleep(50)
-                            wait++
-                        }
-                    }
-                    
-                    // 【绝杀2】复制文件
-                    if (!dest.exists() || dest.length() != src.length()) {
-                        src.copyTo(dest, overwrite = true)
-                    }
-                    
-                    // 【绝杀3】无缝继承时间戳（保证 Termux 里 git status 干净）
-                    dest.setLastModified(src.lastModified())
-                    
-                    // 【绝杀4】保留脚本的可执行权限
-                    if (src.canExecute()) {
-                        dest.setExecutable(true)
-                    }
-                }
-            }
-            
-            temporary.deleteRecursively()
-            if (backup.exists()) backup.renameTo(oldDist)
+            excludeDist(dir)
             
             return dir
         } catch (e: Exception) {
-            temporary.deleteRecursively()
+            // 如果克隆失败，清理掉刚建了一半的目录，防止 UI 显示为“已克隆”
+            dir.deleteRecursively()
             throw e
         }
     }
