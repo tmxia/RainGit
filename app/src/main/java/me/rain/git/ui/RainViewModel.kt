@@ -654,10 +654,14 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteLocalRepo(dir: File) = launchAction {
         require(!downloading) { "下载期间无法删除" }
         
+        // 增加 300ms 延时，确保顶部波浪加载条 (WaveLoadingBar) 能够被用户感知到
+        kotlinx.coroutines.delay(300)
+        
         val deleted = local {
+            // 1. 尝试 Java 原生递归删除
             var success = dir.deleteRecursively()
+            // 2. 如果失败（Android 11 公共存储 FUSE 限制），使用底层 rm -rf 兜底
             if (!success && dir.exists()) {
-                // 如果 File API 失败，尝试 rm -rf 兜底（在 IO 线程安全执行）
                 try {
                     Runtime.getRuntime().exec(arrayOf("sh", "-c", "rm -rf \"${dir.absolutePath}\"")).waitFor()
                     success = !dir.exists()
