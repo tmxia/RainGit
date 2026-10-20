@@ -677,18 +677,31 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteLocalRepo(dir: File) = launchAction {
         require(!downloading) { "下载期间无法删除" }
-        kotlinx.coroutines.delay(300) // 让波浪动画展示出来
+        kotlinx.coroutines.delay(200) // 展示波浪动画
         
-        val deleted = local {
-            // 调用强力删除逻辑
-            forceDelete(dir)
-        }
+        // 1. 尝试正常强杀
+        val directlyDeleted = local { git.deleteRepo(dir) }
         
-        if (deleted && !dir.exists()) {
+        if (directlyDeleted) {
             reloadLocal()
             message = "已彻底删除 ${dir.name}"
+            return@launchAction
+        }
+        
+        // 2. 如果直接被 Android 拦截，采用改名隐藏法（瞬间让列表消失）
+        val hidden = File(dir.parentFile, ".deleted_${System.currentTimeMillis()}_${dir.name}")
+        val renamed = dir.renameTo(hidden)
+        
+        if (renamed) {
+            reloadLocal()
+            message = "已移除 ${dir.name}（系统底层文件将在后台异步清理）"
+            
+            // 3. 后台悄无声息地慢慢删
+            viewModelScope.launch(Dispatchers.IO) {
+                local { git.deleteRepo(hidden) }
+            }
         } else {
-            throw IOException("Android 系统拦截了删除。建议在设置中点击【恢复默认目录】使用应用专属存储，或在 MT管理器 中手动删除此文件夹。")
+            throw IOException("系统彻底锁死了该目录，请使用 MT管理器 手动删除。")
         }
     }
 

@@ -92,6 +92,21 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         count
     }
 
+
+    fun deleteRepo(dir: File): Boolean {
+        if (!dir.exists()) return true
+        // 终极强杀：先 chmod 强行破除只读属性，再 rm -rf
+        try {
+            Runtime.getRuntime().exec(arrayOf("sh", "-c", "chmod -R 777 \"${dir.absolutePath}\"")).waitFor()
+            Runtime.getRuntime().exec(arrayOf("sh", "-c", "rm -rf \"${dir.absolutePath}\"")).waitFor()
+            if (!dir.exists()) return true
+        } catch (e: Exception) {}
+        
+        // Java 兜底
+        val ok = dir.deleteRecursively()
+        return ok || !dir.exists()
+    }
+
     fun clone(repo: RemoteRepo, root: File): File {
         val dir = directory(root, repo)
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
