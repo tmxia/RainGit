@@ -85,7 +85,10 @@ class SecureStore(private val context: Context) {
         set(v) { prefs.edit().putString("email", v).apply() }
 
     private val defaultRoot: File
-        get() = File(context.getExternalFilesDir(null) ?: context.filesDir, "repositories")
+        get() {
+            val downloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            return File(downloads, "github")
+        }
 
     fun root(): File {
         val saved = prefs.getString("root", null)?.let(::File)
