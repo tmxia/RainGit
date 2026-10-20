@@ -544,7 +544,7 @@ private fun CodeScreen(vm: RainViewModel) {
         confirmButton = { TextButton(onClick = { vm.deleteFile(path); delete = null }, enabled = !vm.busy) { Text("删除") } },
         dismissButton = { TextButton(onClick = { delete = null }) { Text("取消") } }) }
     val all = vm.files
-    val folders = remember(all, vm.directories, folder, search) {
+    val folders = remember(all, vm.directories, vm.codeFolder, search) {
         if (search.isNotBlank()) emptyList() else {
             (vm.directories + all.mapNotNull { it.substringBeforeLast('/', "").takeIf(String::isNotBlank) })
                 .asSequence().filter { it.startsWith(vm.codeFolder) }
@@ -552,7 +552,7 @@ private fun CodeScreen(vm: RainViewModel) {
                 .filter { it.isNotBlank() }.distinct().sorted().toList()
         }
     }
-    val files = remember(all, folder, search) {
+    val files = remember(all, vm.codeFolder, search) {
         if (search.isNotBlank()) all.filter { it.contains(search, true) }
         else all.filter { it.startsWith(vm.codeFolder) && !it.removePrefix(vm.codeFolder).contains('/') }
     }
@@ -574,7 +574,7 @@ private fun CodeScreen(vm: RainViewModel) {
                     TextButton(onClick = { vm.setCodeFolder("") }) { Text("根目录") }
                     if (vm.codeFolder.isNotEmpty()) {
                         Icon(Icons.Rounded.ChevronRight, null, Modifier.size(15.dp))
-                        Text(folder.trimEnd('/'), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                        Text(vm.codeFolder.trimEnd('/'), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                         IconButton(onClick = { val parent = vm.codeFolder.trimEnd('/').substringBeforeLast('/', ""); vm.setCodeFolder(if (parent.isBlank()) "" else "$parent/") }) {
                             Icon(Icons.Rounded.ArrowUpward, "上一级")
                         }
@@ -583,7 +583,7 @@ private fun CodeScreen(vm: RainViewModel) {
             }
         }
         LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(folders, key = { "folder-$folder$it" }) { name ->
+            items(folders, key = { "vm.codeFolder-$vm.codeFolder$it" }) { name ->
                 ListItem(headlineContent = { Text(name) }, leadingContent = { Icon(Icons.Rounded.Folder, null, tint = MaterialTheme.colorScheme.secondary) },
                     trailingContent = { Icon(Icons.Rounded.ChevronRight, null) },
                     modifier = Modifier.clickable { vm.setCodeFolder(vm.codeFolder + "$name/") })
