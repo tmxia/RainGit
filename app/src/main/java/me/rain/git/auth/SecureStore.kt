@@ -72,6 +72,10 @@ class SecureStore(private val context: Context) {
         get() = prefs.getInt("theme_mode", 0)
         set(v) { prefs.edit().putInt("theme_mode", v.coerceIn(0, 2)).apply() }
 
+    var showOriginalTime: Boolean
+        get() = prefs.getBoolean("show_original_time", false)
+        set(v) { prefs.edit().putBoolean("show_original_time", v).apply() }
+
     var author: String
         get() = prefs.getString("author", "").orEmpty()
         set(v) { prefs.edit().putString("author", v).apply() }

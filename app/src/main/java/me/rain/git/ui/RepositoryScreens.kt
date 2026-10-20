@@ -256,7 +256,20 @@ internal fun SettingsScreen(vm: RainViewModel, pickDir: () -> Unit, grant: () ->
                 }
             }
         }
-        item { SectionHeading("Git 身份", "提交记录会使用这里的署名") }
+        item { SectionHeading("时间戳", "按 Git 历史设置文件修改时间") }
+    item {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)), shape = RoundedCornerShape(22.dp)) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("显示文件原始时间", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("在文件列表中显示 Git 提交的原始时间", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = vm.showOriginalTime, onCheckedChange = { vm.updateShowOriginalTime(it) })
+            }
+        }
+    }
+
+    item { SectionHeading("Git 身份", "提交记录会使用这里的署名") }
         item {
             Surface(color = MaterialTheme.colorScheme.surfaceContainerLow,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)), shape = RoundedCornerShape(22.dp)) {
@@ -554,3 +567,6 @@ private fun CodeScreen(vm: RainViewModel) {
         }
     }
 }
+
+private val FILE_TIME_FORMATTER = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+private fun formatFileTime(ts: Long): String = if (ts <= 0L) "" else FILE_TIME_FORMATTER.format(java.util.Date(ts))

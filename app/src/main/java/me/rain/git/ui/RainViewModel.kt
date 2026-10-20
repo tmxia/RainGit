@@ -24,6 +24,8 @@ import me.rain.git.local.LocalGit
 import java.io.File
 import java.io.IOException
 
+data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
 class RainViewModel(application: Application) : AndroidViewModel(application) {
     val store = SecureStore(application)
     private val client = GitHubClient { store.token() }
@@ -63,6 +65,9 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var repos by androidx.compose.runtime.mutableStateOf<List<RemoteRepo>>(emptyList())
         private set
+    var showOriginalTime by androidx.compose.runtime.mutableStateOf(store.showOriginalTime)
+    var fileTimes by androidx.compose.runtime.mutableStateOf<Map<String, Long>>(emptyMap())
+
     var localDirs by androidx.compose.runtime.mutableStateOf<List<File>>(emptyList())
         private set
     var favoriteRepos by androidx.compose.runtime.mutableStateOf(store.favoriteRepos)
@@ -107,6 +112,12 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         reloadLocal()
         if (store.token() != null) { account = store.cachedAccount(); refreshAccount() }
+    }
+
+    fun updateShowOriginalTime(v: Boolean) {
+        store.showOriginalTime = v
+        showOriginalTime = v
+        selectedDir?.let { dir -> viewModelScope.launch { refreshLocalInner(dir) } }
     }
 
     fun setTheme(v: Int) { store.themeMode = v; themeMode = v }
@@ -317,11 +328,23 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun refreshLocalInner(dir: File) {
-        val result = local { git.excludeDist(dir); Triple(git.snapshot(dir), git.files(dir), git.directories(dir)) }
+        val result = local {
+            git.excludeDist(dir)
+            val s = git.snapshot(dir)
+            val f = git.files(dir)
+            val d = git.directories(dir)
+            val t = if (store.showOriginalTime) {
+                val m = HashMap<String, Long>()
+                f.forEach { p -> val file = File(dir, p); if (file.isFile) m[p] = file.lastModified() }
+                m
+            } else emptyMap()
+            Quad(s, f, d, t)
+        }
         if (selectedDir == dir) {
             snapshot = result.first
             files = result.second
             directories = result.third
+            fileTimes = result.fourth
         }
     }
 

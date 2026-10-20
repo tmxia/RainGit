@@ -4,6 +4,11 @@ import me.rain.git.github.RemoteRepo
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.diff.DiffFormatter
+import org.eclipse.jgit.diff.RawTextComparator
+import org.eclipse.jgit.util.io.DisabledOutputStream
+import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.revwalk.RevSort
+import org.eclipse.jgit.treewalk.TreeWalk
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.BranchTrackingStatus
 import org.eclipse.jgit.transport.CredentialsProvider
@@ -43,6 +48,49 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
     }
 
     fun isRepo(dir: File) = dir.isDirectory && File(dir, ".git").exists()
+
+
+    fun restoreFileTimes(dir: File): Int = openGit(dir).use { git ->
+        val repo = git.repository
+        val root = dir.canonicalFile
+        val head = repo.resolve(Constants.HEAD) ?: return@use 0
+        val currentFiles = HashSet<String>()
+        RevWalk(repo).use { walk ->
+            val tw = TreeWalk(repo)
+            tw.addTree(walk.parseCommit(head).tree)
+            tw.isRecursive = true
+            while (tw.next()) if (!tw.isSubtree) currentFiles.add(tw.pathString)
+            tw.close()
+        }
+        if (currentFiles.isEmpty()) return@use 0
+
+        val times = HashMap<String, Long>()
+        val df = DiffFormatter(DisabledOutputStream.INSTANCE).apply {
+            setRepository(repo); setDiffComparator(RawTextComparator.DEFAULT); isDetectRenames = true
+        }
+        RevWalk(repo).use { walk ->
+            walk.sort(RevSort.COMMIT_TIME_DESC, true); walk.sort(RevSort.TOPO, true)
+            walk.markStart(walk.parseCommit(head))
+            for (commit in walk) {
+                if (times.size == currentFiles.size) break
+                if (commit.parentCount == 0) {
+                    TreeWalk(repo).use { tw ->
+                        tw.addTree(commit.tree); tw.isRecursive = true
+                        while (tw.next()) if (!tw.isSubtree && tw.pathString in currentFiles && tw.pathString !in times) times[tw.pathString] = commit.authorIdent.getWhen().time
+                    }
+                } else {
+                    df.scan(walk.parseCommit(commit.getParent(0)).tree, commit.tree).forEach {
+                        if (it.newPath in currentFiles && it.newPath !in times) times[it.newPath] = commit.authorIdent.getWhen().time
+                    }
+                }
+            }
+        }
+        df.close()
+
+        var count = 0
+        times.forEach { (path, ts) -> if (File(root, path).let { it.isFile && it.setLastModified(ts) }) count++ }
+        count
+    }
 
     fun clone(repo: RemoteRepo, root: File): File {
         val dir = directory(root, repo)
