@@ -3,6 +3,7 @@
 package me.rain.git.ui
 
 import android.os.Environment
+import java.io.File
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -174,7 +175,7 @@ private fun RepositoryTile(
 internal fun LocalScreen(vm: RainViewModel) {
     var search by rememberSaveable { mutableStateOf("") }
     var create by remember { mutableStateOf(false) }
-    var deleteTarget by remember { mutableStateOf<File?>(null) }
+    var deleteTarget by remember { mutableStateOf<java.io.File?>(null) }
 
     if (create) TextInputDialog("初始化本地仓库", "目录名称", "创建空仓库，随后在 Git 工具中设置 origin。", onDismiss = { create = false }) {
         vm.initRepository(it); create = false
