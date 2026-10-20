@@ -66,6 +66,18 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     var repos by androidx.compose.runtime.mutableStateOf<List<RemoteRepo>>(emptyList())
         private set
     var showOriginalTime by androidx.compose.runtime.mutableStateOf(store.showOriginalTime)
+    var codeFolder by androidx.compose.runtime.mutableStateOf("")
+        private set
+    fun setCodeFolder(path: String) { codeFolder = path }
+    fun backCodeFolder(): Boolean {
+        if (codeFolder.isNotEmpty()) {
+            val parent = codeFolder.trimEnd('/').substringBeforeLast('/', "")
+            codeFolder = if (parent.isBlank()) "" else "$parent/"
+            return true
+        }
+        return false
+    }
+
     var fileTimes by androidx.compose.runtime.mutableStateOf<Map<String, Long>>(emptyMap())
 
     var localDirs by androidx.compose.runtime.mutableStateOf<List<File>>(emptyList())
@@ -272,6 +284,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openRemote(repo: RemoteRepo, tab: Int = 0) {
+        codeFolder = ""
         if (busy) return
         contextVersion++
         closeLog()
@@ -296,6 +309,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openLocal(dir: File) {
+        codeFolder = ""
         if (busy) return
         contextVersion++
         closeLog()

@@ -78,8 +78,17 @@ fun RainApp(
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         BackHandler(enabled = loggedIn && model.screen != "home") {
             if (model.screen == "detail") {
-                if (model.detailTab == 2 && model.chosenRun != null) model.backRun()
-                else model.closeDetail()
+                if (model.editorPath != null) {
+                    model.closeEditor()
+                } else if (model.diffText != null) {
+                    model.closeDiff()
+                } else if (model.detailTab == 2 && model.chosenRun != null) {
+                    model.backRun()
+                } else if (model.detailTab == 0 && model.backCodeFolder()) {
+                    // 返回上一级目录成功，不退出仓库
+                } else {
+                    model.closeDetail()
+                }
             } else model.navigate("home")
         }
         Scaffold(

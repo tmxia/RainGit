@@ -517,7 +517,6 @@ private fun CodeScreen(vm: RainViewModel) {
     val dir = vm.selectedDir
     if (dir == null) { EmptyPanel(Icons.Rounded.Code, "尚无本地文件", "克隆后即可在手机上浏览和修改源码"); return }
     var search by rememberSaveable(dir.path) { mutableStateOf("") }
-    var folder by rememberSaveable(dir.path) { mutableStateOf("") }
     var create by remember(dir) { mutableStateOf(false) }
     var createFolder by remember(dir) { mutableStateOf(false) }
     var fileMenu by remember(dir) { mutableStateOf<String?>(null) }
@@ -526,10 +525,10 @@ private fun CodeScreen(vm: RainViewModel) {
     var moveTarget by remember(dir) { mutableStateOf<String?>(null) }
     var delete by remember(dir) { mutableStateOf<String?>(null) }
     if (create) TextInputDialog("新建文件", "文件名", "在当前目录中创建文件", onDismiss = { create = false }) {
-        vm.createFile(folder + it); create = false
+        vm.createFile(vm.codeFolder + it); create = false
     }
     if (createFolder) TextInputDialog("新建文件夹", "文件夹名称", "将添加 .gitkeep，以便 Git 跟踪空文件夹", onDismiss = { createFolder = false }) {
-        vm.createDirectory(folder + it); createFolder = false
+        vm.createDirectory(vm.codeFolder + it); createFolder = false
     }
     copyTarget?.let { path -> TextInputDialog("复制文件", "目标路径（含文件名）", "例如: app/新文件.txt", path, { copyTarget = null }) {
             vm.copyFile(path, it); copyTarget = null
@@ -548,14 +547,14 @@ private fun CodeScreen(vm: RainViewModel) {
     val folders = remember(all, vm.directories, folder, search) {
         if (search.isNotBlank()) emptyList() else {
             (vm.directories + all.mapNotNull { it.substringBeforeLast('/', "").takeIf(String::isNotBlank) })
-                .asSequence().filter { it.startsWith(folder) }
-                .map { it.removePrefix(folder).substringBefore('/') }
+                .asSequence().filter { it.startsWith(vm.codeFolder) }
+                .map { it.removePrefix(vm.codeFolder).substringBefore('/') }
                 .filter { it.isNotBlank() }.distinct().sorted().toList()
         }
     }
     val files = remember(all, folder, search) {
         if (search.isNotBlank()) all.filter { it.contains(search, true) }
-        else all.filter { it.startsWith(folder) && !it.removePrefix(folder).contains('/') }
+        else all.filter { it.startsWith(vm.codeFolder) && !it.removePrefix(vm.codeFolder).contains('/') }
     }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 7.dp)) {
@@ -572,11 +571,11 @@ private fun CodeScreen(vm: RainViewModel) {
                 trailingIcon = if (search.isNotEmpty()) {{ IconButton(onClick = { search = "" }) { Icon(Icons.Rounded.Close, "清空") } }} else null)
             if (search.isBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { folder = "" }) { Text("根目录") }
-                    if (folder.isNotEmpty()) {
+                    TextButton(onClick = { vm.setCodeFolder("") }) { Text("根目录") }
+                    if (vm.codeFolder.isNotEmpty()) {
                         Icon(Icons.Rounded.ChevronRight, null, Modifier.size(15.dp))
                         Text(folder.trimEnd('/'), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                        IconButton(onClick = { folder = folder.dropLast(1).substringBeforeLast('/', "").let { if (it.isBlank()) "" else "$it/" } }) {
+                        IconButton(onClick = { val parent = vm.codeFolder.trimEnd('/').substringBeforeLast('/', ""); vm.setCodeFolder(if (parent.isBlank()) "" else "$parent/") }) {
                             Icon(Icons.Rounded.ArrowUpward, "上一级")
                         }
                     }
@@ -587,12 +586,12 @@ private fun CodeScreen(vm: RainViewModel) {
             items(folders, key = { "folder-$folder$it" }) { name ->
                 ListItem(headlineContent = { Text(name) }, leadingContent = { Icon(Icons.Rounded.Folder, null, tint = MaterialTheme.colorScheme.secondary) },
                     trailingContent = { Icon(Icons.Rounded.ChevronRight, null) },
-                    modifier = Modifier.clickable { folder += "$name/" })
+                    modifier = Modifier.clickable { vm.setCodeFolder(vm.codeFolder + "$name/") })
             }
             items(files, key = { it }) { path ->
                 val fileTs = if (vm.showOriginalTime) vm.fileTimes[path] else null
                 ListItem(
-                    headlineContent = { Text(if (search.isBlank()) path.removePrefix(folder) else path, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                    headlineContent = { Text(if (search.isBlank()) path.removePrefix(vm.codeFolder) else path, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     supportingContent = fileTs?.let {
                         @androidx.compose.runtime.Composable {
                             Text(formatFileTime(fileTs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
