@@ -66,6 +66,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     var repos by androidx.compose.runtime.mutableStateOf<List<RemoteRepo>>(emptyList())
         private set
     var showOriginalTime by androidx.compose.runtime.mutableStateOf(store.showOriginalTime)
+    private var detailSource = "home"
     var codeFolder by androidx.compose.runtime.mutableStateOf("")
         private set
     fun updateCodeFolder(path: String) { codeFolder = path }
@@ -151,6 +152,22 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         if (tab == 2 && selectedRepo != null) refreshActions()
         if (tab == 3 && selectedRepo != null) refreshCollaboration()
     }
+    fun handleBack(): Boolean {
+        if (screen == "detail") {
+            if (editorPath != null) { closeEditor(); return true }
+            if (diffText != null) { closeDiff(); return true }
+            if (detailTab == 2 && chosenRun != null) { backRun(); return true }
+            if (detailTab == 0 && backCodeFolder()) { return true }
+            closeDetail()
+            return true
+        }
+        if (screen != "home") {
+            navigate("home")
+            return true
+        }
+        return false
+    }
+
     fun closeDetail() {
         if (busy) return
         contextVersion++
@@ -158,7 +175,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         selectedRepo = null
         selectedDir = null
         snapshot = null
-        screen = "home"
+        screen = detailSource
     }
 
     private fun launchAction(action: suspend () -> Unit) {

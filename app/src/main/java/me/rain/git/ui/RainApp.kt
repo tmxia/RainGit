@@ -76,20 +76,8 @@ fun RainApp(
         val loggedIn = model.account != null
         val pageState = rememberSaveableStateHolder()
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        BackHandler(enabled = loggedIn && model.screen != "home") {
-            if (model.screen == "detail") {
-                if (model.editorPath != null) {
-                    model.closeEditor()
-                } else if (model.diffText != null) {
-                    model.closeDiff()
-                } else if (model.detailTab == 2 && model.chosenRun != null) {
-                    model.backRun()
-                } else if (model.detailTab == 0 && model.backCodeFolder()) {
-                    // 返回上一级目录成功，不退出仓库
-                } else {
-                    model.closeDetail()
-                }
-            } else model.navigate("home")
+        BackHandler(enabled = loggedIn) {
+            model.handleBack()
         }
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
@@ -99,11 +87,8 @@ fun RainApp(
                     TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         navigationIcon = {
-                            if (model.screen == "detail") IconButton(onClick = {
-                                if (model.detailTab == 2 && model.chosenRun != null) model.backRun()
-                                else model.closeDetail()
-                            }) {
-                                Icon(Icons.Rounded.ArrowBack, contentDescription = "返回仓库")
+                            if (model.screen == "detail") IconButton(onClick = { model.handleBack() }) {
+                                Icon(Icons.Rounded.ArrowBack, contentDescription = "返回")
                             }
                         },
                         title = {
