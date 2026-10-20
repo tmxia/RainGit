@@ -615,6 +615,23 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         message = "已初始化 ${dir.name}，打开后可设置 origin"
     }
 
+    fun deleteLocalRepo(dir: File) = launchAction {
+        require(!downloading) { "下载期间无法删除" }
+        if (dir.exists() && dir.deleteRecursively()) {
+            reloadLocal()
+            message = "已删除 ${dir.name}"
+        } else {
+            throw IOException("删除失败，可能没有权限")
+        }
+    }
+
+    fun syncLocalRepo(dir: File) = launchAction {
+        require(!downloading) { "下载期间无法同步" }
+        local { git.pull(dir) }
+        reloadLocal()
+        message = "${dir.name} 同步完成"
+    }
+
     fun showCommit(id: String) = launchAction {
         val dir = selectedDir ?: return@launchAction
         diffText = local { git.commitDetails(dir, id) }

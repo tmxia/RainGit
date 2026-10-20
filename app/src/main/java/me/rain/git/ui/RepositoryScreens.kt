@@ -4,6 +4,8 @@ package me.rain.git.ui
 
 import android.os.Environment
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.*
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -167,13 +169,17 @@ private fun RepositoryTile(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun LocalScreen(vm: RainViewModel) {
     var search by rememberSaveable { mutableStateOf("") }
     var create by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<File?>(null) }
+
     if (create) TextInputDialog("初始化本地仓库", "目录名称", "创建空仓库，随后在 Git 工具中设置 origin。", onDismiss = { create = false }) {
         vm.initRepository(it); create = false
     }
+
     val dirs = remember(vm.localDirs, search) { vm.localDirs.filter { it.name.contains(search, true) } }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
@@ -181,14 +187,20 @@ internal fun LocalScreen(vm: RainViewModel) {
                 IconButton(onClick = { create = true }, enabled = !vm.busy) { Icon(Icons.Rounded.Add, "初始化仓库") }
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(search, { search = it }, placeholder = { Text("筛选本地仓库") },
-                leadingIcon = { Icon(Icons.Rounded.Search, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(search, { search = it }, placeholder = { Text("筛选本地仓库") }, leadingIcon = { Icon(Icons.Rounded.Search, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
         }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(dirs, key = { it.absolutePath }) { dir ->
-                Surface(onClick = { vm.openLocal(dir) }, color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)), shape = RoundedCornerShape(17.dp)) {
+                Surface(
+                    modifier = Modifier.combinedClickable(
+                        onClick = { vm.openLocal(dir) },
+                        onLongClick = { deleteTarget = dir }
+                    ),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)),
+                    shape = RoundedCornerShape(17.dp)
+                ) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.FolderOpen, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(12.dp))
@@ -196,12 +208,32 @@ internal fun LocalScreen(vm: RainViewModel) {
                             Text(dir.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                             Text(dir.path, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
+                        IconButton(onClick = { vm.syncLocalRepo(dir) }, enabled = !vm.busy) {
+                            Icon(Icons.Rounded.Sync, "同步", tint = MaterialTheme.colorScheme.primary)
+                        }
                         Icon(Icons.Rounded.ChevronRight, null)
                     }
                 }
             }
             if (dirs.isEmpty()) item { EmptyPanel(Icons.Rounded.FolderOpen, "没有匹配的本地仓库", "从仓库页克隆后即可离线编辑") }
         }
+    }
+
+    if (deleteTarget != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除本地仓库") },
+            text = { Text("确定要删除 ${deleteTarget?.name} 吗？该操作会删除本地所有文件和未提交的修改，且不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteLocalRepo(deleteTarget!!)
+                    deleteTarget = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+            }
+        )
     }
 }
 
