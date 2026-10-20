@@ -175,8 +175,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         selectedRepo = null
         selectedDir = null
         snapshot = null
-        screen = detailSource
-    }
+        screen = detailSource}
 
     private fun launchAction(action: suspend () -> Unit) {
         if (busy) return
@@ -303,6 +302,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     fun openRemote(repo: RemoteRepo, tab: Int = 0) {
         codeFolder = ""
         if (busy) return
+        if (screen != "detail") detailSource = screen
         contextVersion++
         closeLog()
         nextPollAt = 0L
@@ -322,12 +322,12 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         collaboration = emptyList()
         detailTab = tab
         screen = "detail"
-        if (tab == 2) refreshActions() else if (tab == 3) refreshCollaboration() else if (selectedDir != null) refreshLocal()
-    }
+        if (tab == 2) refreshActions() else if (tab == 3) refreshCollaboration() else if (selectedDir != null) refreshLocal()}
 
     fun openLocal(dir: File) {
         codeFolder = ""
         if (busy) return
+        if (screen != "detail") detailSource = screen
         contextVersion++
         closeLog()
         nextPollAt = 0L
@@ -345,8 +345,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         detailTab = 0
         collaboration = emptyList()
         screen = "detail"
-        refreshLocal()
-    }
+        refreshLocal()}
 
     fun clone() = launchAction {
         require(!downloading) { "下载完成后再克隆仓库" }
