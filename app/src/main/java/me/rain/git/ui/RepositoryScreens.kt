@@ -591,24 +591,27 @@ private fun CodeScreen(vm: RainViewModel) {
             }
             items(files, key = { it }) { path ->
                 val fileTs = if (vm.showOriginalTime) vm.fileTimes[path] else null
-                ListItem(headlineContent = { Text(if (search.isBlank()) path.removePrefix(folder) else path, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                    supportingContent = if (fileTs != null) {
-                        { Text(formatFileTime(fileTs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    } else null,
-                    supportingContent = if (fileTs != null) {
-                        { Text(formatFileTime(fileTs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    } else null,
-                    leadingContent = { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp)) },
-                    trailingContent = { Box {
-                        IconButton(onClick = { fileMenu = path }) { Icon(Icons.Rounded.MoreVert, "文件操作") }
-                        DropdownMenu(expanded = fileMenu == path, onDismissRequest = { fileMenu = null }) {
-                            DropdownMenuItem(text = { Text("复制") }, onClick = { fileMenu = null; copyTarget = path }, enabled = !vm.busy)
-                        DropdownMenuItem(text = { Text("移动") }, onClick = { fileMenu = null; moveTarget = path }, enabled = !vm.busy)
-                        DropdownMenuItem(text = { Text("重命名") }, onClick = { fileMenu = null; rename = path }, enabled = !vm.busy)
-                            DropdownMenuItem(text = { Text("删除") }, onClick = { fileMenu = null; delete = path }, enabled = !vm.busy)
+                ListItem(
+                    headlineContent = { Text(if (search.isBlank()) path.removePrefix(folder) else path, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = fileTs?.let {
+                        @androidx.compose.runtime.Composable {
+                            Text(formatFileTime(fileTs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    } },
-                    modifier = Modifier.clickable { vm.openEditor(path) })
+                    },
+                    leadingContent = { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp)) },
+                    trailingContent = {
+                        Box {
+                            IconButton(onClick = { fileMenu = path }) { Icon(Icons.Rounded.MoreVert, "文件操作") }
+                            DropdownMenu(expanded = fileMenu == path, onDismissRequest = { fileMenu = null }) {
+                                DropdownMenuItem(text = { Text("复制") }, onClick = { fileMenu = null; copyTarget = path }, enabled = !vm.busy)
+                                DropdownMenuItem(text = { Text("移动") }, onClick = { fileMenu = null; moveTarget = path }, enabled = !vm.busy)
+                                DropdownMenuItem(text = { Text("重命名") }, onClick = { fileMenu = null; rename = path }, enabled = !vm.busy)
+                                DropdownMenuItem(text = { Text("删除") }, onClick = { fileMenu = null; delete = path }, enabled = !vm.busy)
+                            }
+                        }
+                    },
+                    modifier = Modifier.clickable { vm.openEditor(path) }
+                )
             }
             if (folders.isEmpty() && files.isEmpty()) item { EmptyPanel(Icons.Rounded.SearchOff, "未找到文件", "更换关键字或返回上一级") }
         }

@@ -330,21 +330,15 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun refreshLocalInner(dir: File) {
         val result = local {
             git.excludeDist(dir)
-            val s = git.snapshot(dir)
+            val snap = git.snapshot(dir)
             val f = git.files(dir)
             val d = git.directories(dir)
-            val t = if (store.showOriginalTime) {
+            val timeMap = if (store.showOriginalTime) {
                 val m = HashMap<String, Long>()
                 f.forEach { p -> val file = File(dir, p); if (file.isFile) m[p] = file.lastModified() }
                 m
-            } else emptyMap()
-            Quad(s, f, d, t)
-            val t = if (store.showOriginalTime) {
-                val m = HashMap<String, Long>()
-                f.forEach { p -> val file = File(dir, p); if (file.isFile) m[p] = file.lastModified() }
-                m
-            } else emptyMap()
-            Quad(s, f, d, t)
+            } else emptyMap<String, Long>()
+            Quad(snap, f, d, timeMap)
         }
         if (selectedDir == dir) {
             snapshot = result.first
