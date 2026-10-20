@@ -96,7 +96,7 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         val dir = directory(root, repo)
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
 
-        // 1. 处理残留目录（解决 FUSE EEXIST 报错）
+        
         var distBackup: File? = null
         if (dir.exists()) {
             val files = dir.listFiles()
@@ -112,7 +112,7 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
             dir.deleteRecursively()
         }
 
-        // 2. 如果 FUSE 缓存导致删不掉，尝试重命名战术
+        
         if (dir.exists()) {
             val backup = File(root, "${dir.name}_bak_${System.currentTimeMillis()}")
             if (dir.renameTo(backup)) {
@@ -122,19 +122,19 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         require(!dir.exists()) { "目录无法清理，请在文件管理器中手动删除 ${dir.path} 后重试" }
 
         try {
-            // 3. 执行克隆
+            
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(dir)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
                 .setTransportConfigCallback { openGit(dir).close() }
                 .call().use { }
             excludeDist(dir)
 
-            // 4. 恢复 dist 目录
+            
             if (distBackup != null && distBackup.exists()) {
                 distBackup.renameTo(File(dir, "dist"))
             }
 
-            // 5. 恢复原始时间戳
+            
             restoreFileTimes(dir)
             return dir
         } catch (e: Exception) {
