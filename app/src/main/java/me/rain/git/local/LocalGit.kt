@@ -504,6 +504,26 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
         require(old.renameTo(target)) { "重命名失败" }
     }
 
+    fun copyFile(dir: File, sourcePath: String, targetPath: String) {
+        val src = within(dir, sourcePath)
+        val dest = within(dir, targetPath.trim())
+        require(src.isFile && src.exists()) { "源文件不存在" }
+        require(!dest.exists()) { "目标文件已存在" }
+        val parent = requireNotNull(dest.parentFile) { "目标目录无效" }
+        require(parent.isDirectory || parent.mkdirs()) { "无法创建目标目录" }
+        src.copyTo(dest, overwrite = false)
+    }
+
+    fun moveFile(dir: File, sourcePath: String, targetPath: String) {
+        val src = within(dir, sourcePath)
+        val dest = within(dir, targetPath.trim())
+        require(src.isFile && src.exists()) { "源文件不存在" }
+        require(!dest.exists()) { "目标文件已存在" }
+        val parent = requireNotNull(dest.parentFile) { "目标目录无效" }
+        require(parent.isDirectory || parent.mkdirs()) { "无法创建目标目录" }
+        require(src.renameTo(dest)) { "移动失败" }
+    }
+
     fun deleteFile(dir: File, path: String) {
         val target = within(dir, path)
         require(target.isFile && target.delete()) { "无法删除文件" }

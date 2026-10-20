@@ -522,6 +522,8 @@ private fun CodeScreen(vm: RainViewModel) {
     var createFolder by remember(dir) { mutableStateOf(false) }
     var fileMenu by remember(dir) { mutableStateOf<String?>(null) }
     var rename by remember(dir) { mutableStateOf<String?>(null) }
+    var copyTarget by remember(dir) { mutableStateOf<String?>(null) }
+    var moveTarget by remember(dir) { mutableStateOf<String?>(null) }
     var delete by remember(dir) { mutableStateOf<String?>(null) }
     if (create) TextInputDialog("新建文件", "文件名", "在当前目录中创建文件", onDismiss = { create = false }) {
         vm.createFile(folder + it); create = false
@@ -529,7 +531,13 @@ private fun CodeScreen(vm: RainViewModel) {
     if (createFolder) TextInputDialog("新建文件夹", "文件夹名称", "将添加 .gitkeep，以便 Git 跟踪空文件夹", onDismiss = { createFolder = false }) {
         vm.createDirectory(folder + it); createFolder = false
     }
-    rename?.let { path -> TextInputDialog("重命名文件", "相对仓库根目录的路径", "原路径：$path", path, { rename = null }) {
+    copyTarget?.let { path -> TextInputDialog("复制文件", "目标路径（含文件名）", "例如: app/新文件.txt", path, { copyTarget = null }) {
+            vm.copyFile(path, it); copyTarget = null
+        } }
+        moveTarget?.let { path -> TextInputDialog("移动文件", "目标路径（含文件名）", "例如: app/新文件.txt", path, { moveTarget = null }) {
+            vm.moveFile(path, it); moveTarget = null
+        } }
+        rename?.let { path -> TextInputDialog("重命名文件", "相对仓库根目录的路径", "原路径：$path", path, { rename = null }) {
         vm.renameFile(path, it); rename = null
     } }
     delete?.let { path -> AlertDialog(onDismissRequest = { delete = null }, title = { Text("删除文件？") },
@@ -591,7 +599,9 @@ private fun CodeScreen(vm: RainViewModel) {
                     trailingContent = { Box {
                         IconButton(onClick = { fileMenu = path }) { Icon(Icons.Rounded.MoreVert, "文件操作") }
                         DropdownMenu(expanded = fileMenu == path, onDismissRequest = { fileMenu = null }) {
-                            DropdownMenuItem(text = { Text("重命名") }, onClick = { fileMenu = null; rename = path }, enabled = !vm.busy)
+                            DropdownMenuItem(text = { Text("复制") }, onClick = { fileMenu = null; copyTarget = path }, enabled = !vm.busy)
+                        DropdownMenuItem(text = { Text("移动") }, onClick = { fileMenu = null; moveTarget = path }, enabled = !vm.busy)
+                        DropdownMenuItem(text = { Text("重命名") }, onClick = { fileMenu = null; rename = path }, enabled = !vm.busy)
                             DropdownMenuItem(text = { Text("删除") }, onClick = { fileMenu = null; delete = path }, enabled = !vm.busy)
                         }
                     } },

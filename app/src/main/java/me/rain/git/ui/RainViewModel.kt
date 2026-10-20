@@ -670,6 +670,20 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         message = "已重命名，提交后同步到远端"
     }
 
+    fun copyFile(source: String, target: String) = launchAction {
+        val dir = selectedDir ?: return@launchAction
+        local { git.copyFile(dir, source, target) }
+        refreshLocalInner(dir)
+        message = "已复制到 $target"
+    }
+
+    fun moveFile(source: String, target: String) = launchAction {
+        val dir = selectedDir ?: return@launchAction
+        local { git.moveFile(dir, source, target) }
+        refreshLocalInner(dir)
+        message = "已移动到 $target"
+    }
+
     fun deleteFile(path: String) = launchAction {
         val dir = selectedDir ?: return@launchAction
         local { git.deleteFile(dir, path) }
