@@ -647,11 +647,27 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteLocalRepo(dir: File) = launchAction {
         require(!downloading) { "下载期间无法删除" }
-        if (dir.exists() && dir.deleteRecursively()) {
-            reloadLocal()
-            message = "已删除 ${dir.name}"
-        } else {
-            throw IOException("删除失败，可能没有权限")
+        
+        // 使用底层 rm -rf 命令强力删除，绕过 Android Scoped Storage 在公共目录删除大量小文件（如 .git）的限制
+        val cmd = "rm -rf \"${dir.absolutePath}\""
+        try {
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+            val exitCode = process.waitFor()
+            
+            if (exitCode == 0 && !dir.exists()) {
+                reloadLocal()
+                message = "已删除 ${dir.name}"
+            } else {
+                // 如果底层命令也无法删除，再尝试一次 Java API 并给出明确提示
+                if (dir.deleteRecursively()) {
+                    reloadLocal()
+                    message = "已删除 ${dir.name}"
+                } else {
+                    throw IOException("删除失败，请前往系统文件管理器手动删除 ${dir.path}")
+                }
+            }
+        } catch (e: Exception) {
+            throw IOException("删除失败：${e.message}")
         }
     }
 
