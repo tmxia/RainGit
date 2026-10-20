@@ -571,11 +571,11 @@ private fun CodeScreen(vm: RainViewModel) {
                 trailingIcon = if (search.isNotEmpty()) {{ IconButton(onClick = { search = "" }) { Icon(Icons.Rounded.Close, "清空") } }} else null)
             if (search.isBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { vm.setCodeFolder("") }) { Text("根目录") }
+                    TextButton(onClick = { vm.updateCodeFolder("") }) { Text("根目录") }
                     if (vm.codeFolder.isNotEmpty()) {
                         Icon(Icons.Rounded.ChevronRight, null, Modifier.size(15.dp))
                         Text(vm.codeFolder.trimEnd('/'), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                        IconButton(onClick = { val parent = vm.codeFolder.trimEnd('/').substringBeforeLast('/', ""); vm.setCodeFolder(if (parent.isBlank()) "" else "$parent/") }) {
+                        IconButton(onClick = { val parent = vm.codeFolder.trimEnd('/').substringBeforeLast('/', ""); vm.updateCodeFolder(if (parent.isBlank()) "" else "$parent/") }) {
                             Icon(Icons.Rounded.ArrowUpward, "上一级")
                         }
                     }
@@ -586,7 +586,7 @@ private fun CodeScreen(vm: RainViewModel) {
             items(folders, key = { "vm.codeFolder-$vm.codeFolder$it" }) { name ->
                 ListItem(headlineContent = { Text(name) }, leadingContent = { Icon(Icons.Rounded.Folder, null, tint = MaterialTheme.colorScheme.secondary) },
                     trailingContent = { Icon(Icons.Rounded.ChevronRight, null) },
-                    modifier = Modifier.clickable { vm.setCodeFolder(vm.codeFolder + "$name/") })
+                    modifier = Modifier.clickable { vm.updateCodeFolder(vm.codeFolder + "$name/") })
             }
             items(files, key = { it }) { path ->
                 val fileTs = if (vm.showOriginalTime) vm.fileTimes[path] else null

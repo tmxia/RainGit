@@ -68,7 +68,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     var showOriginalTime by androidx.compose.runtime.mutableStateOf(store.showOriginalTime)
     var codeFolder by androidx.compose.runtime.mutableStateOf("")
         private set
-    fun setCodeFolder(path: String) { codeFolder = path }
+    fun updateCodeFolder(path: String) { codeFolder = path }
     fun backCodeFolder(): Boolean {
         if (codeFolder.isNotEmpty()) {
             val parent = codeFolder.trimEnd('/').substringBeforeLast('/', "")
