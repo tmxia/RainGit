@@ -95,49 +95,54 @@ class LocalGit(private val token: () -> String?, private val cacheDir: File) {
     fun clone(repo: RemoteRepo, root: File): File {
         val dir = directory(root, repo)
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
-        require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
-        
-        val temporary = File(cacheDir, ".rain-clone-${java.util.UUID.randomUUID()}")
-        
+
+        // 1. 处理残留目录（解决 FUSE EEXIST 报错）
+        var distBackup: File? = null
+        if (dir.exists()) {
+            val files = dir.listFiles()
+            if (files != null && files.any { it.name != "dist" }) {
+                throw IOException("目标目录包含其他文件（或上一次克隆的残留），请在文件管理器中彻底删除 ${dir.path} 后重试")
+            }
+            val dist = File(dir, "dist")
+            if (dist.exists()) {
+                distBackup = File(root, "${dir.name}_dist_bak")
+                if (distBackup.exists()) distBackup.deleteRecursively()
+                dist.renameTo(distBackup)
+            }
+            dir.deleteRecursively()
+        }
+
+        // 2. 如果 FUSE 缓存导致删不掉，尝试重命名战术
+        if (dir.exists()) {
+            val backup = File(root, "${dir.name}_bak_${System.currentTimeMillis()}")
+            if (dir.renameTo(backup)) {
+                backup.deleteRecursively()
+            }
+        }
+        require(!dir.exists()) { "目录无法清理，请在文件管理器中手动删除 ${dir.path} 后重试" }
+
         try {
-            
-            Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
+            // 3. 执行克隆
+            Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(dir)
                 .setCredentialsProvider(auth()).setCloneAllBranches(true)
-                .setTransportConfigCallback { openGit(temporary).close() }
+                .setTransportConfigCallback { openGit(dir).close() }
                 .call().use { }
-            
-            val oldDist = File(dir, "dist")
-            require(!oldDist.exists() || !File(temporary, "dist").exists()) {
-                "远端仓库包含 dist，请先移动本地下载目录后重试"
+            excludeDist(dir)
+
+            // 4. 恢复 dist 目录
+            if (distBackup != null && distBackup.exists()) {
+                distBackup.renameTo(File(dir, "dist"))
             }
-            excludeDist(temporary)
-            
-            
-            if (dir.exists()) dir.deleteRecursively()
-            val targetDirPath = dir.absolutePath
-            val mkdirCmd = "mkdir -p \"$targetDirPath\""
-            val mkProcess = Runtime.getRuntime().exec(arrayOf("sh", "-c", mkdirCmd))
-            val mkExit = mkProcess.waitFor()
-            if (mkExit != 0) {
-                val mkErr = mkProcess.errorStream.bufferedReader().use { it.readText() }
-                throw RuntimeException("创建目标目录失败(可能无权限): $mkErr")
-            }
-            
-            
-            val cmd = "cp -r -p -f \"${temporary.absolutePath}/.\" \"$targetDirPath/\""
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
-            val exitCode = process.waitFor()
-            
-            if (exitCode != 0) {
-                val errMsg = process.errorStream.bufferedReader().use { it.readText() }
-                throw RuntimeException("底层 cp 失败: $errMsg")
-            }
-            
+
+            // 5. 恢复原始时间戳
+            restoreFileTimes(dir)
             return dir
         } catch (e: Exception) {
+            dir.deleteRecursively()
+            if (distBackup != null && distBackup.exists()) {
+                distBackup.renameTo(File(dir, "dist"))
+            }
             throw e
-        } finally {
-            temporary.deleteRecursively()
         }
     }
 
