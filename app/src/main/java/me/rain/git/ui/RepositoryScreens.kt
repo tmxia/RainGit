@@ -552,7 +552,11 @@ private fun CodeScreen(vm: RainViewModel) {
                     modifier = Modifier.clickable { folder += "$name/" })
             }
             items(files, key = { it }) { path ->
+                val fileTs = if (vm.showOriginalTime) java.io.File(dir, path).lastModified() else null
                 ListItem(headlineContent = { Text(if (search.isBlank()) path.removePrefix(folder) else path, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = if (fileTs != null) {
+                        { Text(formatFileTime(fileTs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    } else null,
                     leadingContent = { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp)) },
                     trailingContent = { Box {
                         IconButton(onClick = { fileMenu = path }) { Icon(Icons.Rounded.MoreVert, "文件操作") }
