@@ -117,7 +117,7 @@ fun RainApp(
                                 IconButton(onClick = {
                                     when (model.screen) {
                                         "detail" -> when (model.detailTab) { 2 -> model.refreshActions(); 3 -> model.refreshCollaboration(); else -> model.refreshLocal() }
-                                        "local" -> model.reloadLocal()
+                                        "local" -> model.syncAllLocal()
                                         else -> model.refreshRepos()
                                     }
                                 }, enabled = !model.busy) { Icon(Icons.Rounded.Refresh, contentDescription = "刷新") }

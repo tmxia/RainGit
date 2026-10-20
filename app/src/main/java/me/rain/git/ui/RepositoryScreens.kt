@@ -208,9 +208,6 @@ internal fun LocalScreen(vm: RainViewModel) {
                             Text(dir.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                             Text(dir.path, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        IconButton(onClick = { vm.syncLocalRepo(dir) }, enabled = !vm.busy) {
-                            Icon(Icons.Rounded.Sync, "同步", tint = MaterialTheme.colorScheme.primary)
-                        }
                         Icon(Icons.Rounded.ChevronRight, null)
                     }
                 }

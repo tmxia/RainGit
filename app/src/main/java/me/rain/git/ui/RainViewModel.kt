@@ -625,11 +625,21 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun syncLocalRepo(dir: File) = launchAction {
+    fun syncAllLocal() = launchAction {
         require(!downloading) { "下载期间无法同步" }
-        local { git.pull(dir) }
+        val dirs = localDirs
+        if (dirs.isEmpty()) { message = "没有本地仓库可同步"; return@launchAction }
+        var ok = 0; var fail = 0
+        for (d in dirs) {
+            try {
+                local { git.pull(d) }
+                ok++
+            } catch (e: Exception) {
+                fail++
+            }
+        }
         reloadLocal()
-        message = "${dir.name} 同步完成"
+        message = if (fail == 0) "已同步所有 $ok 个本地仓库" else "同步完成：成功 $ok 个，失败 $fail 个"
     }
 
     fun showCommit(id: String) = launchAction {
