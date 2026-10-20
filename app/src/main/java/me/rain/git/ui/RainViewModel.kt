@@ -339,6 +339,12 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
                 m
             } else emptyMap()
             Quad(s, f, d, t)
+            val t = if (store.showOriginalTime) {
+                val m = HashMap<String, Long>()
+                f.forEach { p -> val file = File(dir, p); if (file.isFile) m[p] = file.lastModified() }
+                m
+            } else emptyMap()
+            Quad(s, f, d, t)
         }
         if (selectedDir == dir) {
             snapshot = result.first
