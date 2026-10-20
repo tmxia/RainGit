@@ -648,26 +648,39 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteLocalRepo(dir: File) = launchAction {
         require(!downloading) { "下载期间无法删除" }
         
-        // 使用底层 rm -rf 命令强力删除，绕过 Android Scoped Storage 在公共目录删除大量小文件（如 .git）的限制
-        val cmd = "rm -rf \"${dir.absolutePath}\""
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
-            val exitCode = process.waitFor()
+        // 1. 尝试重命名为隐藏的垃圾文件（让 UI 列表瞬间刷新）
+        val trash = File(dir.parentFile, ".trash_${System.currentTimeMillis()}_${dir.name}")
+        val moved = dir.renameTo(trash)
+        
+        if (moved) {
+            reloadLocal()
+            message = "已移除 ${dir.name}，正在后台彻底清理..."
             
-            if (exitCode == 0 && !dir.exists()) {
-                reloadLocal()
-                message = "已删除 ${dir.name}"
-            } else {
-                // 如果底层命令也无法删除，再尝试一次 Java API 并给出明确提示
-                if (dir.deleteRecursively()) {
-                    reloadLocal()
-                    message = "已删除 ${dir.name}"
-                } else {
-                    throw IOException("删除失败，请前往系统文件管理器手动删除 ${dir.path}")
+            // 2. 后台强杀物理文件
+            viewModelScope.launch(Dispatchers.IO) {
+                var deleted = trash.deleteRecursively()
+                if (!deleted) {
+                    try {
+                        Runtime.getRuntime().exec(arrayOf("sh", "-c", "rm -rf \"${trash.absolutePath}\"")).waitFor()
+                    } catch (e: Exception) {}
                 }
             }
-        } catch (e: Exception) {
-            throw IOException("删除失败：${e.message}")
+        } else {
+            // 如果重命名失败（说明文件被占用或权限不足），只能尝试直接强删
+            var deleted = dir.deleteRecursively()
+            if (!deleted) {
+                try {
+                    Runtime.getRuntime().exec(arrayOf("sh", "-c", "rm -rf \"${dir.absolutePath}\"")).waitFor()
+                    deleted = !dir.exists()
+                } catch (e: Exception) {}
+            }
+            
+            if (deleted) {
+                reloadLocal()
+                message = "已彻底删除 ${dir.name}"
+            } else {
+                throw IOException("删除失败：Android 限制了对此目录的修改，请去系统文件管理器手动删除。")
+            }
         }
     }
 
