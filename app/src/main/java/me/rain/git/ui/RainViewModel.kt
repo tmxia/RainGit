@@ -264,8 +264,14 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun reloadLocal() {
-        localDirs = runCatching { store.root().listFiles()?.filter { !it.name.startsWith(".rain-") && git.isRepo(it) }?.sortedBy { it.name } ?: emptyList() }
-            .getOrDefault(emptyList())
+        localDirs = runCatching {
+            store.root().listFiles()
+                ?.filter { 
+                    // 过滤掉隐藏文件夹（如 .trash_xxx, .backup_xxx），并且必须是合法 Git 仓库
+                    !it.name.startsWith(".") && git.isRepo(it) 
+                }
+                ?.sortedBy { it.name } ?: emptyList()
+        }.getOrDefault(emptyList())
     }
 
     fun chooseRoot(uri: Uri) = launchAction {
@@ -648,39 +654,25 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteLocalRepo(dir: File) = launchAction {
         require(!downloading) { "下载期间无法删除" }
         
-        // 1. 尝试重命名为隐藏的垃圾文件（让 UI 列表瞬间刷新）
-        val trash = File(dir.parentFile, ".trash_${System.currentTimeMillis()}_${dir.name}")
-        val moved = dir.renameTo(trash)
-        
-        if (moved) {
-            reloadLocal()
-            message = "已移除 ${dir.name}，正在后台彻底清理..."
-            
-            // 2. 后台强杀物理文件
-            viewModelScope.launch(Dispatchers.IO) {
-                var deleted = trash.deleteRecursively()
-                if (!deleted) {
-                    try {
-                        Runtime.getRuntime().exec(arrayOf("sh", "-c", "rm -rf \"${trash.absolutePath}\"")).waitFor()
-                    } catch (e: Exception) {}
-                }
-            }
-        } else {
-            // 如果重命名失败（说明文件被占用或权限不足），只能尝试直接强删
-            var deleted = dir.deleteRecursively()
-            if (!deleted) {
+        val deleted = local {
+            var success = dir.deleteRecursively()
+            if (!success && dir.exists()) {
+                // 如果 File API 失败，尝试 rm -rf 兜底（在 IO 线程安全执行）
                 try {
                     Runtime.getRuntime().exec(arrayOf("sh", "-c", "rm -rf \"${dir.absolutePath}\"")).waitFor()
-                    deleted = !dir.exists()
-                } catch (e: Exception) {}
+                    success = !dir.exists()
+                } catch (e: Exception) {
+                    // 忽略异常
+                }
             }
-            
-            if (deleted) {
-                reloadLocal()
-                message = "已彻底删除 ${dir.name}"
-            } else {
-                throw IOException("删除失败：Android 限制了对此目录的修改，请去系统文件管理器手动删除。")
-            }
+            success
+        }
+        
+        if (deleted) {
+            reloadLocal()
+            message = "已彻底删除 ${dir.name}"
+        } else {
+            throw IOException("系统拦截了删除操作，请使用 MT管理器 等工具手动删除此文件夹。")
         }
     }
 
