@@ -651,32 +651,44 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         message = "已初始化 ${dir.name}，打开后可设置 origin"
     }
 
-    fun deleteLocalRepo(dir: File) = launchAction {
-        require(!downloading) { "下载期间无法删除" }
-        
-        // 增加 300ms 延时，确保顶部波浪加载条 (WaveLoadingBar) 能够被用户感知到
-        kotlinx.coroutines.delay(300)
-        
-        val deleted = local {
-            // 1. 尝试 Java 原生递归删除
-            var success = dir.deleteRecursively()
-            // 2. 如果失败（Android 11 公共存储 FUSE 限制），使用底层 rm -rf 兜底
-            if (!success && dir.exists()) {
-                try {
-                    Runtime.getRuntime().exec(arrayOf("sh", "-c", "rm -rf \"${dir.absolutePath}\"")).waitFor()
-                    success = !dir.exists()
-                } catch (e: Exception) {
-                    // 忽略异常
+    private fun forceDelete(file: File): Boolean {
+        if (!file.exists()) return true
+        if (file.isDirectory) {
+            val files = file.listFiles()
+            if (files != null) {
+                for (f in files) {
+                    forceDelete(f)
                 }
             }
-            success
+        }
+        // 强制赋予可写/可读权限（针对 Git 克隆下来的只读对象文件）
+        file.setWritable(true)
+        file.setReadable(true)
+        
+        // 先尝试 Java API，再尝试 NIO (Java 7+)
+        if (file.delete()) return true
+        if (!file.exists()) return true
+        try {
+            return java.nio.file.Files.deleteIfExists(file.toPath())
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    fun deleteLocalRepo(dir: File) = launchAction {
+        require(!downloading) { "下载期间无法删除" }
+        kotlinx.coroutines.delay(300) // 让波浪动画展示出来
+        
+        val deleted = local {
+            // 调用强力删除逻辑
+            forceDelete(dir)
         }
         
-        if (deleted) {
+        if (deleted && !dir.exists()) {
             reloadLocal()
             message = "已彻底删除 ${dir.name}"
         } else {
-            throw IOException("系统拦截了删除操作，请使用 MT管理器 等工具手动删除此文件夹。")
+            throw IOException("Android 系统拦截了删除。建议在设置中点击【恢复默认目录】使用应用专属存储，或在 MT管理器 中手动删除此文件夹。")
         }
     }
 
